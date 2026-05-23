@@ -1,0 +1,32 @@
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.get('/', (req, res) => {
+    res.json({
+        success: true,
+        message: 'TourGo API Service is running',
+        version: '1.0.0'
+    });
+});
+
+app.use('/api/auth', require('./src/routes/auth.routes'));
+app.use('/api/users', require('./src/routes/user.routes'));
+app.use('/api/tours', require('./src/routes/tour.routes'));
+app.use('/api/hotels', require('./src/routes/hotel.routes'));
+app.use('/api/bookings', require('./src/routes/booking.routes'));
+app.use('/api/favorites', require('./src/routes/favorite.routes'));
+app.use('/api/hotel-reviews', require('./src/routes/hotel_review.routes'));
+
+app.use(require('./src/middleware/notFound'));
+app.use(require('./src/middleware/errorHandler'));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`TourGo API Service is running on port ${PORT}`);
+});
