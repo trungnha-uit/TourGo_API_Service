@@ -3,23 +3,11 @@ const ERROR_CODES = require('../constants/errorCodes');
 
 exports.getAllTours = async (req, res) => {
     try {
-        const { q, region } = req.query;
-
-        let query = supabase
+        const { data, error } = await supabase
             .from('tours')
             .select('*, tour_images(*)')
             .eq('status', 'APPROVED')
             .order('created_at', { ascending: false });
-
-        if (q) {
-            query = query.ilike('name', `%${q}%`);
-        }
-
-        if (region) {
-            query = query.eq('region', region);
-        }
-
-        const { data, error } = await query;
 
         if (error) {
             return res.status(500).json({
@@ -87,23 +75,42 @@ exports.getTourById = async (req, res) => {
 
 exports.searchTours = async (req, res) => {
     try {
-        const { q } = req.query;
+        const { q, region, min_price, max_price, min_rating, sort_by, order } = req.query;
 
-        if (!q) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: 'MISSING_QUERY',
-                message: 'Search query is required'
-            });
-        }
-
-        const { data, error } = await supabase
+        let query = supabase
             .from('tours')
             .select('*, tour_images(*)')
-            .eq('status', 'APPROVED')
-            .ilike('name', `%${q}%`)
-            .order('rating', { ascending: false });
+            .eq('status', 'APPROVED');
+
+        // Text search
+        if (q) {
+            query = query.ilike('name', `%${q}%`);
+        }
+
+        // Region filter
+        if (region) {
+            query = query.eq('region', region);
+        }
+
+        // Price range
+        if (min_price) {
+            query = query.gte('price', min_price);
+        }
+        if (max_price) {
+            query = query.lte('price', max_price);
+        }
+
+        // Rating filter
+        if (min_rating) {
+            query = query.gte('rating', min_rating);
+        }
+
+        // Sorting
+        const sortField = sort_by || 'created_at';
+        const sortOrder = order === 'asc' ? { ascending: true } : { ascending: false };
+        query = query.order(sortField, sortOrder);
+
+        const {data, error} = await query;
 
         if (error) {
             return res.status(500).json({
@@ -123,53 +130,6 @@ exports.searchTours = async (req, res) => {
 
     } catch (error) {
         console.error('Search tours error:', error);
-        res.status(500).json({
-            success: false,
-            data: null,
-            error: ERROR_CODES.SERVER_ERROR,
-            message: 'Internal server error'
-        });
-    }
-};
-
-exports.filterToursByRegion = async (req, res) => {
-    try {
-        const { region } = req.query;
-
-        if (!region) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: 'MISSING_REGION',
-                message: 'Region parameter is required'
-            });
-        }
-
-        const { data, error } = await supabase
-            .from('tours')
-            .select('*, tour_images(*)')
-            .eq('status', 'APPROVED')
-            .eq('region', region)
-            .order('rating', { ascending: false });
-
-        if (error) {
-            return res.status(500).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.SERVER_ERROR,
-                message: error.message
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: data,
-            error: null,
-            message: 'Tours filtered successfully'
-        });
-
-    } catch (error) {
-        console.error('Filter tours error:', error);
         res.status(500).json({
             success: false,
             data: null,
