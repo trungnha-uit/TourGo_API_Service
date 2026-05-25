@@ -27,24 +27,26 @@ exports.register = async (req, res) => {
             });
         }
 
-        const {error: insertError} = await supabase
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const {error: updateError} = await supabase
             .from('users')
-            .insert([{
-                id: authData.user.id,
+            .update({
                 name,
                 email,
                 role: 'user',
                 avatar: null,
                 phone: null
-            }]);
+            })
+            .eq('id', authData.user.id);
 
-        if(insertError) {
-            console.error('Failed to create user profile:', insertError);
+        if(updateError) {
+            console.error('Failed to update user profile:', updateError);
             return res.status(400).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.SERVER_ERROR,
-                message: 'Failed to create user profile'
+                message: 'Failed to update user profile'
             });
         }
 
