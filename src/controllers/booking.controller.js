@@ -5,7 +5,8 @@ exports.createBooking = async (req, res) => {
     try {
         const bookingData = {
             ...req.body,
-            user_id: req.user.id
+            user_id: req.user.id,
+            status: 'PENDING',
         };
 
         const { data, error } = await supabase
