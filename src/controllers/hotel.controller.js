@@ -3,18 +3,10 @@ const ERROR_CODES = require('../constants/errorCodes');
 
 exports.getAllHotels = async (req, res) => {
     try {
-        const { q } = req.query;
-
-        let query = supabase
+        const { data, error } = await supabase
             .from('hotels')
             .select('*, hotel_images(*)')
-            .order('rating', { ascending: false });
-
-        if (q) {
-            query = query.ilike('name', `%${q}%`);
-        }
-
-        const { data, error } = await query;
+            .order('created_at', { ascending: false });
 
         if (error) {
             return res.status(500).json({
@@ -82,22 +74,32 @@ exports.getHotelById = async (req, res) => {
 
 exports.searchHotels = async (req, res) => {
     try {
-        const { q } = req.query;
+        const { q, city, min_price, max_price, min_rating, sort_by, order } = req.query;
 
-        if (!q) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: 'MISSING_QUERY',
-                message: 'Search query is required'
-            });
+        let query = supabase
+            .from('hotels')
+            .select('*, hotel_images(*)');
+
+        if (q) {
+            query = query.ilike('name', `%${q}%`);
+        }
+        if (city) {
+            query = query.ilike('city', `%${city}%`);
+        }
+        if (min_price) {
+            query = query.gte('price_per_night', min_price);
+        }
+        if (max_price) {
+            query = query.lte('price_per_night', max_price);
+        }
+        if (min_rating) {
+            query = query.gte('rating', min_rating);
         }
 
-        const { data, error } = await supabase
-            .from('hotels')
-            .select('*, hotel_images(*)')
-            .ilike('name', `%${q}%`)
-            .order('rating', { ascending: false });
+        const sortOrder = order === 'asc' ? { ascending: true } : { ascending: false };
+        query = query.order(sort_by, sortOrder);
+
+        const { data, error } = await query;
 
         if (error) {
             return res.status(500).json({
