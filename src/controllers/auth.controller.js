@@ -7,7 +7,12 @@ exports.register = async (req, res) => {
 
         const {data: authData, error: authError} = await supabase.auth.signUp({
             email,
-            password
+            password,
+            options: {
+                data: {
+                    name: name  
+                }
+            }
         });
 
         if (authError) {
@@ -119,6 +124,49 @@ exports.login = async (req, res) => {
 
     } catch (error) {
         console.error('Login error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+}
+
+exports.resetPassword = async (req, res) => {
+    try {
+        const {email} = req.body;
+
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_EMAIL,
+                message: 'Email is required'
+            });
+        }
+
+        const {error} = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: 'tourgo://reset'
+        });
+
+        if (error) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.RESET_PASSWORD_FAILED,
+                message: 'Failed to send password reset email'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Password reset email sent successfully'
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
         res.status(500).json({
             success: false,
             data: null,
