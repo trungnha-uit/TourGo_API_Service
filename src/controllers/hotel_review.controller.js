@@ -165,12 +165,52 @@ exports.deleteHotelReview = async (req, res) => {
 
 exports.uploadReviewImage = async (req, res) => {
     try {
-        res.status(501).json({
-            success: false,
-            data: null,
-            error: 'NOT_IMPLEMENTED',
-            message: 'Image upload not implemented yet'
+        const { reviewId } = req.params;
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'MISSING_FILE',
+                message: 'Image file is required'
+            });
+        }
+
+        const file = req.file;
+        const fileExt = file.mimetype.split('/')[1]; // jpeg, png, webp
+        const fileName = `reviews/${reviewId}/${Date.now()}.${fileExt}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('review-images')
+            .upload(fileName, file.buffer, {
+                contentType: file.mimetype,
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Supabase upload error:', uploadError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: uploadError.message
+            });
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('review-images')
+            .getPublicUrl(fileName);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                imageUrl: publicUrl,
+                fileName: fileName
+            },
+            error: null,
+            message: 'Image uploaded successfully'
         });
+
     } catch (error) {
         console.error('Upload image error:', error);
         res.status(500).json({
