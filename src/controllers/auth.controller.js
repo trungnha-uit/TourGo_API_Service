@@ -272,3 +272,68 @@ exports.logout = async (req, res) => {
         });
     }
 }
+
+exports.updatePassword = async (req, res) => {
+    try {
+        const { password } = req.body;
+
+        if (!password) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_PASSWORD,
+                message: 'Password is required'
+            });
+        }
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_AUTH_HEADER,
+                message: 'Authorization header is required'
+            });
+        }
+
+        const token = authHeader.substring(7);
+
+        const { data, error } = await supabase.auth.updateUser(
+            { password },
+            { accessToken: token }
+        );
+
+        if (error) {
+            let errorCode = ERROR_CODES.SERVER_ERROR;
+
+            if (error.message.includes('same as the old password')) {
+                errorCode = ERROR_CODES.PASSWORD_SAME_AS_OLD;
+            } else if (error.message.includes('Invalid token')) {
+                errorCode = ERROR_CODES.INVALID_TOKEN;
+            }
+
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: errorCode,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Password updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update password error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+}

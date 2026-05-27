@@ -27,7 +27,7 @@ exports.getReviews = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'MISSING_PARAMETER',
+                error: Error_CODES.MISSING_PARAMETER,
                 message: 'Either hotelId or tourId is required'
             });
         }
@@ -79,7 +79,7 @@ exports.createReview = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'MISSING_PARAMETER',
+                error: ERROR_CODES.MISSING_PARAMETER,
                 message: 'Either hotel_id or tour_id is required'
             });
         }
@@ -91,7 +91,7 @@ exports.createReview = async (req, res) => {
             return res.status(500).json({
                 success: false,
                 data: null,
-                error: 'SERVER_ERROR',
+                error: ERROR_CODES.SERVER_ERROR,
                 message: bookingError.message
             });
         }
@@ -100,7 +100,7 @@ exports.createReview = async (req, res) => {
             return res.status(403).json({
                 success: false,
                 data: null,
-                error: 'BOOKING_REQUIRED',
+                error: ERROR_CODES.BOOKING_ERROR,
                 message: `You must complete a booking before reviewing this ${hotel_id ? 'hotel' : 'tour'}`
             });
         }
@@ -121,7 +121,7 @@ exports.createReview = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'REVIEW_EXISTS',
+                error: ERROR_CODES.REVIEW_EXISTS,
                 message: `You have already reviewed this ${hotel_id ? 'hotel' : 'tour'}`
             });
         }
@@ -174,7 +174,7 @@ exports.updateReview = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'INVALID_TYPE',
+                error: ERROR_CODES.INVALID_TYPE,
                 message: 'Type must be either "hotel" or "tour"'
             });
         }
@@ -208,7 +208,7 @@ exports.updateReview = async (req, res) => {
             return res.status(500).json({
                 success: false,
                 data: null,
-                error: 'SERVER_ERROR',
+                error: ERROR_CODES.SERVER_ERROR,
                 message: bookingError.message
             });
         }
@@ -217,7 +217,7 @@ exports.updateReview = async (req, res) => {
             return res.status(403).json({
                 success: false,
                 data: null,
-                error: 'BOOKING_REQUIRED',
+                error: ERROR_CODES.BOOKING_ERROR,
                 message: 'You must have a completed booking to update this review'
             });
         }
@@ -266,7 +266,7 @@ exports.deleteReview = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'INVALID_TYPE',
+                error: ERROR_CODES.INVALID_TYPE,
                 message: 'Type must be either "hotel" or "tour"'
             });
         }
@@ -314,7 +314,7 @@ exports.uploadReviewImage = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'MISSING_FILE',
+                error: ERROR_CODES.MISSING_FILE,
                 message: 'Image file is required'
             });
         }
@@ -373,7 +373,7 @@ exports.saveReviewImages = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'INVALID_TYPE',
+                error: ERROR_CODES.INVALID_TYPE,
                 message: 'Type must be either "hotel" or "tour"'
             });
         }
