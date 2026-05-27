@@ -5,8 +5,8 @@ exports.getAllUsers = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('users')
-            .select('id, name, email, role, avatar, phone, created_at')
-            .order('created_at', { ascending: false });
+            .select('id, name, email, role, avatar, phone, create_at')
+            .order('create_at', { ascending: false });
 
         if (error) {
             return res.status(500).json({
@@ -37,29 +37,18 @@ exports.getAllUsers = async (req, res) => {
 
 exports.getCurrentUser = async (req, res) => {
     try {
-        console.log('=== GET CURRENT USER DEBUG ===');
-        console.log('User ID from token:', req.user.id);
-        console.log('Full user object:', req.user);
-
         const { data, error } = await supabase
             .from('users')
-            .select('id, name, email, role, avatar, phone, created_at')
+            .select('id, name, email, role, avatar, phone, create_at')
             .eq('id', req.user.id)
             .single();
-
-        console.log('Query result - data:', data);
-        console.log('Query result - error:', error);
 
         if (error || !data) {
             return res.status(404).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.NOT_FOUND,
-                message: 'User not found',
-                debug: {
-                    userId: req.user.id,
-                    queryError: error
-                }
+                message: 'User not found'
             });
         }
 
@@ -87,7 +76,7 @@ exports.updateUserProfile = async (req, res) => {
             .from('users')
             .update(req.body)
             .eq('id', req.user.id)
-            .select('id, name, email, role, avatar, phone')
+            .select('id, name, email, role, avatar, phone, create_at')
             .single();
 
         if (error || !data) {
