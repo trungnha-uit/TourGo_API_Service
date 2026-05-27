@@ -21,7 +21,7 @@ app.use('/api/tours', require('./src/routes/tour.routes'));
 app.use('/api/hotels', require('./src/routes/hotel.routes'));
 app.use('/api/bookings', require('./src/routes/booking.routes'));
 app.use('/api/favorites', require('./src/routes/favorite.routes'));
-app.use('/api/hotel-reviews', require('./src/routes/hotel_review.routes'));
+app.use('/api/reviews', require('./src/routes/review.routes'));
 
 app.use(require('./src/middleware/notFound'));
 app.use(require('./src/middleware/errorHandler'));

@@ -1,23 +1,46 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
 
-exports.getReviewsByHotelId = async (req, res) => {
-    try {
-        const { hotelId } = req.query;
+async function checkBookingCompleted(userId, hotelId, tourId) {
+    const query = supabase
+        .from('bookings')
+        .select('id, status')
+        .eq('user_id', userId)
+        .eq('status', 'COMPLETED')
+        .limit(1);
 
-        if (!hotelId) {
+    if (hotelId) {
+        query.eq('hotel_id', hotelId);
+    } else if (tourId) {
+        query.eq('tour_id', tourId);
+    }
+
+    const { data, error } = await query.single();
+    return { data, error };
+}
+
+exports.getReviews = async (req, res) => {
+    try {
+        const { hotelId, tourId } = req.query;
+
+        if (!hotelId && !tourId) {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: 'MISSING_HOTEL_ID',
-                message: 'Hotel ID is required'
+                error: 'MISSING_PARAMETER',
+                message: 'Either hotelId or tourId is required'
             });
         }
 
+        const tableName = hotelId ? 'hotel_reviews' : 'tour_reviews';
+        const imageTable = hotelId ? 'hotel_review_images' : 'tour_review_images';
+        const filterColumn = hotelId ? 'hotel_id' : 'tour_id';
+        const filterId = hotelId || tourId;
+
         const { data, error } = await supabase
-            .from('hotel_reviews')
-            .select('id, hotel_id, user_id, review_text, stars, created_at, users!hotel_reviews_user_id_users_fkey(name, avatar), hotel_review_images(image_url)')
-            .eq('hotel_id', hotelId)
+            .from(tableName)
+            .select(`id, ${filterColumn}, user_id, review_text, stars, created_at, users!${tableName}_user_id_users_fkey(name, avatar), ${imageTable}(image_url)`)
+            .eq(filterColumn, filterId)
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -47,15 +70,59 @@ exports.getReviewsByHotelId = async (req, res) => {
     }
 };
 
-exports.createHotelReview = async (req, res) => {
+exports.createReview = async (req, res) => {
     try {
+        const { hotel_id, tour_id } = req.body;
+        const userId = req.user.id;
+
+        if (!hotel_id && !tour_id) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'MISSING_PARAMETER',
+                message: 'Either hotel_id or tour_id is required'
+            });
+        }
+
+        const { data: booking, error: bookingError } = await checkBookingCompleted(userId, hotel_id, tour_id);
+
+        if (bookingError || !booking) {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: 'BOOKING_REQUIRED',
+                message: `You must complete a booking before reviewing this ${hotel_id ? 'hotel' : 'tour'}`
+            });
+        }
+
+        const tableName = hotel_id ? 'hotel_reviews' : 'tour_reviews';
+        const filterColumn = hotel_id ? 'hotel_id' : 'tour_id';
+        const filterId = hotel_id || tour_id;
+
+        const { data: existingReview } = await supabase
+            .from(tableName)
+            .select('id')
+            .eq('user_id', userId)
+            .eq(filterColumn, filterId)
+            .limit(1)
+            .single();
+
+        if (existingReview) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'REVIEW_EXISTS',
+                message: `You have already reviewed this ${hotel_id ? 'hotel' : 'tour'}`
+            });
+        }
+
         const reviewData = {
             ...req.body,
-            user_id: req.user.id
+            user_id: userId
         };
 
         const { data, error } = await supabase
-            .from('hotel_reviews')
+            .from(tableName)
             .insert([reviewData])
             .select()
             .single();
@@ -87,15 +154,59 @@ exports.createHotelReview = async (req, res) => {
     }
 };
 
-exports.updateHotelReview = async (req, res) => {
+exports.updateReview = async (req, res) => {
     try {
         const { id } = req.params;
+        const { type } = req.query;
+        const userId = req.user.id;
+
+        if (!type || (type !== 'hotel' && type !== 'tour')) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'INVALID_TYPE',
+                message: 'Type must be either "hotel" or "tour"'
+            });
+        }
+
+        const tableName = type === 'hotel' ? 'hotel_reviews' : 'tour_reviews';
+        const filterColumn = type === 'hotel' ? 'hotel_id' : 'tour_id';
+
+        const { data: existingReview, error: reviewError } = await supabase
+            .from(tableName)
+            .select(filterColumn)
+            .eq('id', id)
+            .eq('user_id', userId)
+            .single();
+
+        if (reviewError || !existingReview) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Review not found'
+            });
+        }
+
+        const hotelId = type === 'hotel' ? existingReview.hotel_id : null;
+        const tourId = type === 'tour' ? existingReview.tour_id : null;
+
+        const { data: booking, error: bookingError } = await checkBookingCompleted(userId, hotelId, tourId);
+
+        if (bookingError || !booking) {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: 'BOOKING_REQUIRED',
+                message: 'You must have a completed booking to update this review'
+            });
+        }
 
         const { data, error } = await supabase
-            .from('hotel_reviews')
+            .from(tableName)
             .update(req.body)
             .eq('id', id)
-            .eq('user_id', req.user.id)
+            .eq('user_id', userId)
             .select()
             .single();
 
@@ -126,12 +237,24 @@ exports.updateHotelReview = async (req, res) => {
     }
 };
 
-exports.deleteHotelReview = async (req, res) => {
+exports.deleteReview = async (req, res) => {
     try {
         const { id } = req.params;
+        const { type } = req.query;
+
+        if (!type || (type !== 'hotel' && type !== 'tour')) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'INVALID_TYPE',
+                message: 'Type must be either "hotel" or "tour"'
+            });
+        }
+
+        const tableName = type === 'hotel' ? 'hotel_reviews' : 'tour_reviews';
 
         const { error } = await supabase
-            .from('hotel_reviews')
+            .from(tableName)
             .delete()
             .eq('id', id)
             .eq('user_id', req.user.id);
@@ -177,7 +300,7 @@ exports.uploadReviewImage = async (req, res) => {
         }
 
         const file = req.file;
-        const fileExt = file.mimetype.split('/')[1]; // jpeg, png, webp
+        const fileExt = file.mimetype.split('/')[1];
         const fileName = `reviews/${reviewId}/${Date.now()}.${fileExt}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -224,8 +347,21 @@ exports.uploadReviewImage = async (req, res) => {
 
 exports.saveReviewImages = async (req, res) => {
     try {
+        const { type } = req.query;
+
+        if (!type || (type !== 'hotel' && type !== 'tour')) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'INVALID_TYPE',
+                message: 'Type must be either "hotel" or "tour"'
+            });
+        }
+
+        const tableName = type === 'hotel' ? 'hotel_review_images' : 'tour_review_images';
+
         const { data, error } = await supabase
-            .from('hotel_review_images')
+            .from(tableName)
             .insert([req.body])
             .select()
             .single();
