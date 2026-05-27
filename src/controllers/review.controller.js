@@ -15,7 +15,7 @@ async function checkBookingCompleted(userId, hotelId, tourId) {
         query.eq('tour_id', tourId);
     }
 
-    const { data, error } = await query.single();
+    const { data, error } = await query.maybeSingle();
     return { data, error };
 }
 
@@ -86,7 +86,17 @@ exports.createReview = async (req, res) => {
 
         const { data: booking, error: bookingError } = await checkBookingCompleted(userId, hotel_id, tour_id);
 
-        if (bookingError || !booking) {
+        if (bookingError) {
+            console.error('Booking check error:', bookingError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: 'SERVER_ERROR',
+                message: bookingError.message
+            });
+        }
+
+        if (!booking) {
             return res.status(403).json({
                 success: false,
                 data: null,
@@ -193,7 +203,17 @@ exports.updateReview = async (req, res) => {
 
         const { data: booking, error: bookingError } = await checkBookingCompleted(userId, hotelId, tourId);
 
-        if (bookingError || !booking) {
+        if (bookingError) {
+            console.error('Booking check error:', bookingError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: 'SERVER_ERROR',
+                message: bookingError.message
+            });
+        }
+
+        if (!booking) {
             return res.status(403).json({
                 success: false,
                 data: null,
