@@ -138,3 +138,199 @@ exports.searchTours = async (req, res) => {
         });
     }
 };
+
+exports.createTour = async (req, res) => {
+    try {
+        const tourData = {
+            ...req.body,
+            status: 'PENDING',
+            businesses_id: req.user.id
+        };
+
+        const { data, error } = await supabase
+            .from('tours')
+            .insert([tourData]);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            data: data[0],
+            error: null,
+            message: 'Tour created successfully'
+        });
+    } catch (error) {
+        console.error('Create tour error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+}
+
+exports.uploadTourImages = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_FILE,
+                message: 'No image file uploaded'
+            });  
+        }
+
+        const file = req.file;
+        const fileExt = file.mimetype.split('/')[1];
+        const fileName = `tour/${id}/${Date.now()}.${fileExt}`;
+
+        const { data, error } = await supabase
+            .storage
+            .from('tour-images')
+            .upload(fileName, file.buffer, {
+                contentType: file.mimetype
+            });
+            
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('tour-images')
+            .getPublicUrl(fileName);
+
+        res.status(200).json({
+            success: true,
+            data: { imageUrl: publicUrl, fileName: fileName },
+            error: null,
+            message: 'Image uploaded successfully'
+        });
+    } catch (error) {
+        console.error('Upload tour image error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
+exports.getPendingTours = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('tours')
+            .select('*, tour_images(*)')
+            .eq('status', 'PENDING')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Pending tours retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Get pending tours error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
+exports.approveTour = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('tours')
+            .update({ status: 'APPROVED' })
+            .eq('id', id);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Tour approved successfully'
+        });
+    } catch (error) {
+        console.error('Approve tour error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
+exports.rejectTour = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('tours')
+            .update({ status: 'REJECTED' })
+            .eq('id', id);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Tour rejected successfully'
+        });
+    } catch (error) {
+        console.error('Reject tour error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};

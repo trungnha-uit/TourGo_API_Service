@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const ERROR_CODES = require('../constants/errorCodes');
 
 const auth = async (req, res, next) => {
     try {
@@ -8,7 +9,7 @@ const auth = async (req, res, next) => {
             return res.status(401).json({
                 success: false,
                 data: null,
-                error: 'UNAUTHORIZED',
+                error: ERROR_CODES.UNAUTHORIZED,
                 message: 'Authorization header is required'
             });
         }
@@ -20,8 +21,17 @@ const auth = async (req, res, next) => {
             return res.status(401).json({
                 success: false,
                 data: null,
-                error: 'INVALID_TOKEN',
+                error: ERROR_CODES.INVALID_TOKEN,
                 message: 'Invalid or expired token'
+            });
+        }
+
+        if (user.status === 'suspended') {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.ACCOUNT_SUSPENDED,
+                message: 'Account is suspended'
             });
         }
 
@@ -33,7 +43,7 @@ const auth = async (req, res, next) => {
         res.status(500).json({
             success: false,
             data: null,
-            error: 'SERVER_ERROR',
+            error: ERROR_CODES.SERVER_ERROR,
             message: 'Internal server error'
         });
     }

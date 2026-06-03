@@ -15,6 +15,7 @@ app.get('/', (req, res) => {
     });
 });
 
+app.use('/api/admin', require('./src/routes/admin.routes'));
 app.use('/api/auth', require('./src/routes/auth.routes'));
 app.use('/api/users', require('./src/routes/user.routes'));
 app.use('/api/tours', require('./src/routes/tour.routes'));

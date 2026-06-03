@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase');
+const ERROR_CODES = require('../constants/errorCodes');
 
 const adminOnly = async (req, res, next) => {
     try {
@@ -6,7 +7,7 @@ const adminOnly = async (req, res, next) => {
             return res.status(401).json({
                 success: false,
                 data: null,
-                error: 'UNAUTHORIZED',
+                error: ERROR_CODES.UNAUTHORIZED,
                 message: 'Authentication required'
             });
         }
@@ -21,7 +22,7 @@ const adminOnly = async (req, res, next) => {
             return res.status(403).json({
                 success: false,
                 data: null,
-                error: 'FORBIDDEN',
+                error: ERROR_CODES.FORBIDDEN,
                 message: 'User profile not found'
             });
         }
@@ -30,7 +31,7 @@ const adminOnly = async (req, res, next) => {
             return res.status(403).json({
                 success: false,
                 data: null,
-                error: 'FORBIDDEN',
+                error: ERROR_CODES.FORBIDDEN,
                 message: 'Admin access required'
             });
         }
@@ -42,7 +43,7 @@ const adminOnly = async (req, res, next) => {
         res.status(500).json({
             success: false,
             data: null,
-            error: 'SERVER_ERROR',
+            error: ERROR_CODES.SERVER_ERROR,
             message: 'Internal server error'
         });
     }
