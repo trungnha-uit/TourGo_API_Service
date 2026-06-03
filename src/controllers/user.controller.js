@@ -194,44 +194,6 @@ exports.getMyBusiness = async (req, res) => {
     }
 };
 
-exports.resubmitBusiness = async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('businesses')
-            .update({
-                ...req.body,
-                status: 'pending'
-            })
-            .eq('user_id', req.user.id)
-            .select('*')
-            .single();
-
-        if (error || !data) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.SERVER_ERROR,
-                message: error?.message || 'Resubmit failed'
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: data,
-            error: null,
-            message: 'Business resubmitted successfully'
-        });
-    } catch (error) {
-        console.error('Resubmit business error:', error);
-        res.status(500).json({
-            success: false,
-            data: null,
-            error: ERROR_CODES.SERVER_ERROR,
-            message: error.message
-        });
-    }
-};
-
 exports.updateBusinessProfile = async (req, res) => {
     try {
         const { data, error } = await supabase

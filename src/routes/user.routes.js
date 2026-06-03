@@ -9,7 +9,6 @@ router.delete('/me', auth, userController.deleteUserAccount);
 
 router.post('/businesses/register', auth, userController.registerBusiness);
 router.get('/businesses/me', auth, userController.getMyBusiness);
-router.put('/businesses/resubmit', auth, userController.resubmitBusiness);
 router.put('/businesses/me', auth, userController.updateBusinessProfile);
 router.delete('/businesses/me', auth, userController.deleteBusinessAccount);
 
