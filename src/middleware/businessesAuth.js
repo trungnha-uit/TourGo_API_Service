@@ -8,7 +8,7 @@ const businessesAuth = async (req, res, next) => {
             .select('id, status')
             .eq('user_id', req.user.id)
             .single();
-            
+
         if (!business) {
             return res.status(404).json({
                 success: false,
@@ -37,4 +37,6 @@ const businessesAuth = async (req, res, next) => {
             message: error.message
         });
     }
-}
+};
+
+module.exports = businessesAuth;
