@@ -43,7 +43,7 @@ exports.getAllUsers = async (req, res) => {
                 bookings: bookingsCount,
                 reported: 0,  // TODO: Thêm khi có bảng reports
                 tier: tier,
-                location: user.location || 'Vietnam',
+                location: user.location,
                 created_at: user.create_at
             };
         });

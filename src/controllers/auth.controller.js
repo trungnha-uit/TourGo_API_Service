@@ -3,7 +3,7 @@ const ERROR_CODES = require('../constants/errorCodes');
 
 exports.register = async (req, res) => {
     try {
-        const {name, email, password} = req.body;
+        const {name, email, password, location} = req.body;
 
         const {data: authData, error: authError} = await supabase.auth.signUp({
             email,
@@ -41,7 +41,8 @@ exports.register = async (req, res) => {
                 email,
                 role: 'user',
                 avatar: null,
-                phone: null
+                phone: null,
+                location: location || null
             })
             .eq('id', authData.user.id);
 
