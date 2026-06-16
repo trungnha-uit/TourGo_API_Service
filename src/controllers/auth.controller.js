@@ -134,6 +134,95 @@ exports.login = async (req, res) => {
     }
 }
 
+/**
+ * Social login (Google / Facebook).
+ *
+ * The client signs in with the provider natively and sends us the provider's
+ * OIDC id_token. Google returns an id_token directly; Facebook must use
+ * "Limited Login" so the client also yields an OIDC id_token. We exchange it
+ * for a Supabase session and return the SAME shape as `login`, so the mobile
+ * app reuses its existing session handling.
+ *
+ * Body: { provider: 'google' | 'facebook', token: <provider id_token> }
+ *
+ * Requires the matching provider to be enabled in the Supabase dashboard
+ * (Authentication > Providers) with the client IDs registered there.
+ */
+exports.socialLogin = async (req, res) => {
+    try {
+        const {provider, token} = req.body;
+
+        if (!provider) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_PROVIDER,
+                message: 'Provider is required'
+            });
+        }
+
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_TOKEN,
+                message: 'Provider token is required'
+            });
+        }
+
+        const SUPPORTED_PROVIDERS = ['google', 'facebook'];
+        if (!SUPPORTED_PROVIDERS.includes(provider)) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.INVALID_PROVIDER,
+                message: `Unsupported provider: ${provider}`
+            });
+        }
+
+        const {data, error} = await supabase.auth.signInWithIdToken({
+            provider,
+            token
+        });
+
+        if (error || !data || !data.session) {
+            return res.status(401).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SOCIAL_LOGIN_FAILED,
+                message: error ? error.message : 'Social login failed'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: {
+                user: {
+                    id: data.user.id,
+                    email: data.user.email
+                },
+                session: {
+                    access_token: data.session.access_token,
+                    refresh_token: data.session.refresh_token,
+                    expires_at: data.session.expires_at,
+                    token_type: data.session.token_type
+                }
+            },
+            error: null,
+            message: 'Login successful'
+        });
+
+    } catch (error) {
+        console.error('Social login error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+}
+
 exports.resetPassword = async (req, res) => {
     try {
         const {email} = req.body;
