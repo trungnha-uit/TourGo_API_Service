@@ -13,4 +13,17 @@ router.put('/businesses/:businessId/approve', auth, adminOnly, adminController.a
 router.put('/businesses/:businessId/suspend', auth, adminOnly, adminController.suspendBusiness);
 router.put('/businesses/:businessId/reject', auth, adminOnly, adminController.rejectBusiness);
 
+// Dashboard
+router.get('/stats', auth, adminOnly, adminController.getStats);
+router.get('/activity', auth, adminOnly, adminController.getActivity);
+
+// Reports (Moderation)
+router.get('/reports', auth, adminOnly, adminController.getReports);
+router.put('/reports/:reportId/dismiss', auth, adminOnly, adminController.dismissReport);
+router.put('/reports/:reportId/resolve', auth, adminOnly, adminController.resolveReport);
+
+// Profile
+router.get('/team', auth, adminOnly, adminController.getTeam);
+router.get('/audit-log', auth, adminOnly, adminController.getAuditLog);
+
 module.exports = router;
