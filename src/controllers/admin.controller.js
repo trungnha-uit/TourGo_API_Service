@@ -258,39 +258,51 @@ exports.getPendingBusinesses = async (req, res) => {
     }
 };
 
-exports.approveBusiness = async (req, res) => {
-    try {
+exports.approveBusiness = async (req, res) => {try {
         const { businessId } = req.params;
         const adminId = req.user.id;
 
-        const { error } = await supabase
+        // 1. Lấy thông tin business để biết nó thuộc về User nào (user_id)
+        const { data: businessData, error: fetchError } = await supabase
+            .from('businesses')
+            .select('user_id, name')
+            .eq('id', businessId)
+            .single();
+
+        if (fetchError || !businessData) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thông tin doanh nghiệp'
+            });
+        }
+
+        // 2. Cập nhật trạng thái Business thành 'active'
+        const { error: bizError } = await supabase
             .from('businesses')
             .update({ status: 'active', reviewed_by: adminId, reviewed_at: new Date() })
             .eq('id', businessId);
 
-        if (error) {
-            return res.status(500).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.SERVER_ERROR,
-                message: error.message
-            });
-        }
+        if (bizError) throw bizError;
 
-        const { data: b } = await supabase.from('businesses').select('name').eq('id', businessId).single();
-        await logAudit(req, `Approved business ${b && b.name ? b.name : businessId}`, 'approve');
+        // 3. QUAN TRỌNG: Cập nhật role thành 'business' trong bảng users/profiles
+        const { error: roleError } = await supabase
+            .from('users') // Hoặc 'profiles' tùy cấu trúc của bạn
+            .update({ role: 'business' })
+            .eq('id', businessData.user_id);
+
+        if (roleError) console.error('Lỗi cập nhật role:', roleError.message);
+
+        // 4. Ghi nhật ký hệ thống
+        await logAudit(req, `Approved business ${businessData.name}`, 'approve');
 
         res.status(200).json({
             success: true,
-            data: null,
-            error: null,
-            message: 'Business approved successfully'
+            message: 'Phê duyệt doanh nghiệp thành công và đã nâng cấp quyền đối tác'
         });
     } catch (error) {
         console.error('Approve business error:', error);
         res.status(500).json({
             success: false,
-            data: null,
             error: ERROR_CODES.SERVER_ERROR,
             message: error.message
         });
