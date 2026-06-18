@@ -130,12 +130,29 @@ exports.searchHotels = async (req, res) => {
 
 exports.createHotel = async (req, res) => {
     try {
+        // Find the business profile associated with this user
+        const { data: business, error: bizError } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .single();
+
+        if (bizError || !business) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NO_BUSINESS,
+                message: 'No business profile found for this user'
+            });
+        }
+
         const hotelData = {
             name: req.body.name,
             description: req.body.description,
             price_per_night: req.body.price,
             address: req.body.city ? (req.body.address + ", " + req.body.city) : req.body.address,
-            amenities: Array.isArray(req.body.amenities) ? req.body.amenities.join(', ') : req.body.amenities
+            amenities: Array.isArray(req.body.amenities) ? req.body.amenities.join(', ') : req.body.amenities,
+            businesses_id: business.id
         };
 
         const { data, error } = await supabase
