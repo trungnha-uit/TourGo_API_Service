@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const emailService = require('../utils/email');
 
 /**
  * Record one moderation action in the audit_logs table. Best-effort only —
@@ -226,6 +227,12 @@ exports.activateUser = async (req, res) => {
 
 exports.getPendingBusinesses = async (req, res) => {
     try {
+        console.log('[DEBUG] getPendingBusinesses called.');
+        console.log('[DEBUG] SUPABASE_URL:', process.env.SUPABASE_URL);
+        console.log('[DEBUG] SUPABASE_SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+        console.log('[DEBUG] supabaseKey length:', supabase.supabaseKey ? supabase.supabaseKey.length : 0);
+        console.log('[DEBUG] supabaseKey ends with:', supabase.supabaseKey ? supabase.supabaseKey.substring(supabase.supabaseKey.length - 10) : 'none');
+
         const { data: businesses, error } = await supabase
             .from('businesses')
             .select('*')
@@ -233,6 +240,7 @@ exports.getPendingBusinesses = async (req, res) => {
             .order('created_at', { ascending: false });
 
         if (error) {
+            console.error('[DEBUG] Supabase query error:', error);
             return res.status(500).json({
                 success: false,
                 data: null,
@@ -241,6 +249,7 @@ exports.getPendingBusinesses = async (req, res) => {
             });
         }
 
+        console.log('[DEBUG] getPendingBusinesses returning businesses count:', (businesses || []).length);
         res.status(200).json({
             success: true,
             data: businesses || [],
@@ -260,24 +269,41 @@ exports.getPendingBusinesses = async (req, res) => {
 
 exports.approveBusiness = async (req, res) => {
     try {
-        // businessId ở đây thực chất là User ID được gửi từ App Android
-        const { businessId: userId } = req.params; 
+        const { businessId } = req.params; 
         const adminId = req.user.id;
 
-        // 1. Tìm đơn đăng ký (business) của User này đang ở trạng thái pending
-        const { data: businessData, error: fetchError } = await supabase
+        // Try lookup by business ID first
+        let businessData = null;
+        const { data: byId } = await supabase
             .from('businesses')
             .select('id, user_id, name')
-            .eq('user_id', userId) // Tìm theo user_id
+            .eq('id', businessId)
             .eq('status', 'pending')
-            .single();
+            .maybeSingle();
 
-        if (fetchError || !businessData) {
+        if (byId) {
+            businessData = byId;
+        } else {
+            // Fallback: lookup by user ID
+            const { data: byUserId } = await supabase
+                .from('businesses')
+                .select('id, user_id, name')
+                .eq('user_id', businessId)
+                .eq('status', 'pending')
+                .maybeSingle();
+            if (byUserId) {
+                businessData = byUserId;
+            }
+        }
+
+        if (!businessData) {
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy đơn đăng ký kinh doanh đang chờ của người dùng này'
             });
         }
+
+        const userId = businessData.user_id;
 
         // 2. Cập nhật trạng thái Business đó thành 'active'
         const { error: bizError } = await supabase
@@ -287,7 +313,7 @@ exports.approveBusiness = async (req, res) => {
 
         if (bizError) throw bizError;
 
-        // 3. Cập nhật role thành 'business' trong bảng 'users' (như bạn xác nhận)
+        // 3. Cập nhật role thành 'business' trong bảng 'users'
         const { error: roleError } = await supabase
             .from('users') 
             .update({ role: 'business' })
@@ -296,6 +322,17 @@ exports.approveBusiness = async (req, res) => {
         if (roleError) console.error('Lỗi cập nhật role:', roleError.message);
 
         await logAudit(req, `Approved business ${businessData.name}`, 'approve');
+
+        // Fetch user email to send notification email
+        const { data: userProfile } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', userId)
+            .single();
+        if (userProfile && userProfile.email) {
+            emailService.sendBusinessApprovalEmail(userProfile.email, businessData.name)
+                .catch(err => console.error('Failed to send approval email:', err));
+        }
 
         res.status(200).json({
             success: true,
@@ -308,7 +345,7 @@ exports.approveBusiness = async (req, res) => {
             message: error.message
         });
     }
-}
+};
 exports.suspendBusiness = async (req, res) => {
     try {
         const { businessId } = req.params;
@@ -353,6 +390,13 @@ exports.rejectBusiness = async (req, res) => {
         const { reason } = req.body;
         const adminId = req.user.id;
 
+        // Fetch user_id and name first to send notification email
+        const { data: businessData } = await supabase
+            .from('businesses')
+            .select('user_id, name')
+            .eq('id', businessId)
+            .single();
+
         const { error } = await supabase
             .from('businesses')
             .update({ status: 'rejected', reviewed_by: adminId, reviewed_at: new Date(), rejection_reason: reason || null })
@@ -367,8 +411,20 @@ exports.rejectBusiness = async (req, res) => {
             });
         }
 
-        const { data: b } = await supabase.from('businesses').select('name').eq('id', businessId).single();
-        await logAudit(req, `Rejected business ${b && b.name ? b.name : businessId}`, 'reject');
+        await logAudit(req, `Rejected business ${businessData ? businessData.name : businessId}`, 'reject');
+
+        // Fetch user email to send notification email
+        if (businessData) {
+            const { data: userProfile } = await supabase
+                .from('users')
+                .select('email')
+                .eq('id', businessData.user_id)
+                .single();
+            if (userProfile && userProfile.email) {
+                emailService.sendBusinessRejectionEmail(userProfile.email, businessData.name, reason)
+                    .catch(err => console.error('Failed to send rejection email:', err));
+            }
+        }
 
         res.status(200).json({
             success: true,

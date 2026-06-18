@@ -194,3 +194,89 @@ exports.checkBooking = async (req, res) => {
         });
     }
 };
+
+exports.getBusinessBookings = async (req, res) => {
+    try {
+        const { data: business, error: bizError } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .single();
+
+        if (bizError || !business) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Business profile not found'
+            });
+        }
+
+        // 1. Fetch tours
+        const { data: tours } = await supabase
+            .from('tours')
+            .select('id')
+            .eq('businesses_id', business.id);
+        const tourIds = tours ? tours.map(t => t.id) : [];
+
+        // 2. Fetch hotels (defensive)
+        let hotelIds = [];
+        try {
+            const { data: hotels } = await supabase
+                .from('hotels')
+                .select('id')
+                .eq('businesses_id', business.id);
+            if (hotels) hotelIds = hotels.map(h => h.id);
+        } catch (e) {
+            console.warn('Hotels query in getBusinessBookings failed:', e.message);
+        }
+
+        if (tourIds.length === 0 && hotelIds.length === 0) {
+            return res.status(200).json({
+                success: true,
+                data: [],
+                error: null,
+                message: 'No bookings found'
+            });
+        }
+
+        // 3. Query bookings
+        let query = supabase.from('bookings').select('*');
+        if (tourIds.length > 0 && hotelIds.length > 0) {
+            query = query.or(`tour_id.in.(${tourIds.join(',')}),hotel_id.in.(${hotelIds.join(',')})`);
+        } else if (tourIds.length > 0) {
+            query = query.in('tour_id', tourIds);
+        } else if (hotelIds.length > 0) {
+            query = query.in('hotel_id', hotelIds);
+        }
+
+        const { data: bookings, error } = await query
+            .select('*, users(name, phone), hotels(name), tours(name)')
+            .order('booking_date', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: bookings || [],
+            error: null,
+            message: 'Bookings retrieved successfully'
+        });
+
+    } catch (error) {
+        console.error('Get business bookings error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};

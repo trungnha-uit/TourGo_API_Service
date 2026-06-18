@@ -127,3 +127,45 @@ exports.searchHotels = async (req, res) => {
         });
     }
 };
+
+exports.createHotel = async (req, res) => {
+    try {
+        const hotelData = {
+            name: req.body.name,
+            description: req.body.description,
+            price_per_night: req.body.price,
+            address: req.body.city ? (req.body.address + ", " + req.body.city) : req.body.address,
+            amenities: Array.isArray(req.body.amenities) ? req.body.amenities.join(', ') : req.body.amenities
+        };
+
+        const { data, error } = await supabase
+            .from('hotels')
+            .insert([hotelData])
+            .select('*')
+            .single();
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Hotel created successfully'
+        });
+    } catch (error) {
+        console.error('Create hotel error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};

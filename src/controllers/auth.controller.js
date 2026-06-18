@@ -1,11 +1,12 @@
 const supabase = require('../config/supabase');
+const supabaseAuth = require('../config/supabaseAuth');
 const ERROR_CODES = require('../constants/errorCodes');
 
 exports.register = async (req, res) => {
     try {
         const {name, email, password, location} = req.body;
 
-        const {data: authData, error: authError} = await supabase.auth.signUp({
+        const {data: authData, error: authError} = await supabaseAuth.auth.signUp({
             email,
             password,
             options: {
@@ -91,7 +92,7 @@ exports.login = async (req, res) => {
     try {
         const {email, password} = req.body;
 
-        const {data: authData, error: authError} = await supabase.auth.signInWithPassword({
+        const {data: authData, error: authError} = await supabaseAuth.auth.signInWithPassword({
             email,
             password
         });
@@ -105,12 +106,21 @@ exports.login = async (req, res) => {
             });
         }
 
+        // Fetch user profile from public.users table
+        const { data: userProfile } = await supabase
+            .from('users')
+            .select('name, role')
+            .eq('id', authData.user.id)
+            .single();
+
         res.status(200).json({
             success: true,
             data: {
                 user: {
                     id: authData.user.id,
-                    email: authData.user.email
+                    email: authData.user.email,
+                    name: userProfile ? userProfile.name : '',
+                    role: userProfile ? userProfile.role : 'user'
                 },
                 session: {
                     access_token: authData.session.access_token,
@@ -180,7 +190,7 @@ exports.socialLogin = async (req, res) => {
             });
         }
 
-        const {data, error} = await supabase.auth.signInWithIdToken({
+        const {data, error} = await supabaseAuth.auth.signInWithIdToken({
             provider,
             token
         });
@@ -236,7 +246,7 @@ exports.resetPassword = async (req, res) => {
             });
         }
 
-        const {error} = await supabase.auth.resetPasswordForEmail(email, {
+        const {error} = await supabaseAuth.auth.resetPasswordForEmail(email, {
             redirectTo: 'tourgo://reset'
         });
 
@@ -279,7 +289,7 @@ exports.refreshToken = async (req, res) => {
             });
         }
 
-        const {data, error} = await supabase.auth.refreshSession({
+        const {data, error} = await supabaseAuth.auth.refreshSession({
             refresh_token
         });
 
@@ -334,7 +344,7 @@ exports.logout = async (req, res) => {
             });
         }
 
-        const {error} = await supabase.auth.signOut();
+        const {error} = await supabaseAuth.auth.signOut();
 
         if(error) {
             return res.status(400).json({
@@ -388,7 +398,7 @@ exports.updatePassword = async (req, res) => {
 
         const token = authHeader.substring(7);
 
-        const { data, error } = await supabase.auth.updateUser(
+        const { data, error } = await supabaseAuth.auth.updateUser(
             { password },
             { accessToken: token }
         );

@@ -412,3 +412,116 @@ exports.saveReviewImages = async (req, res) => {
         });
     }
 };
+
+exports.getBusinessReviews = async (req, res) => {
+    try {
+        const { data: business, error: bizError } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .single();
+
+        if (bizError || !business) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Business profile not found'
+            });
+        }
+
+        // 1. Fetch tours
+        const { data: tours } = await supabase
+            .from('tours')
+            .select('id, name')
+            .eq('businesses_id', business.id);
+        const tourIds = tours ? tours.map(t => t.id) : [];
+        const tourNames = {};
+        if (tours) tours.forEach(t => tourNames[t.id] = t.name);
+
+        // 2. Fetch hotels (defensive)
+        let hotelIds = [];
+        const hotelNames = {};
+        try {
+            const { data: hotels } = await supabase
+                .from('hotels')
+                .select('id, name')
+                .eq('businesses_id', business.id);
+            if (hotels) {
+                hotels.forEach(h => {
+                    hotelIds.push(h.id);
+                    hotelNames[h.id] = h.name;
+                });
+            }
+        } catch (e) {
+            console.warn('Hotels query in getBusinessReviews failed:', e.message);
+        }
+
+        const allReviews = [];
+
+        // 3. Fetch tour reviews
+        if (tourIds.length > 0) {
+            const { data: tourReviews } = await supabase
+                .from('tour_reviews')
+                .select('id, tour_id, user_id, review_text, stars, created_at, users(name, avatar)')
+                .in('tour_id', tourIds);
+            
+            if (tourReviews) {
+                tourReviews.forEach(r => {
+                    allReviews.push({
+                        id: r.id,
+                        rating: r.stars,
+                        name: r.users ? r.users.name : 'Unknown User',
+                        avatar: r.users ? r.users.avatar : null,
+                        body: r.review_text,
+                        listing: tourNames[r.tour_id] || 'Tour',
+                        category: 'tour',
+                        created_at: r.created_at
+                    });
+                });
+            }
+        }
+
+        // 4. Fetch hotel reviews
+        if (hotelIds.length > 0) {
+            const { data: hotelReviews } = await supabase
+                .from('hotel_reviews')
+                .select('id, hotel_id, user_id, review_text, stars, created_at, users(name, avatar)')
+                .in('hotel_id', hotelIds);
+
+            if (hotelReviews) {
+                hotelReviews.forEach(r => {
+                    allReviews.push({
+                        id: r.id,
+                        rating: r.stars,
+                        name: r.users ? r.users.name : 'Unknown User',
+                        avatar: r.users ? r.users.avatar : null,
+                        body: r.review_text,
+                        listing: hotelNames[r.hotel_id] || 'Hotel',
+                        category: 'hotel',
+                        created_at: r.created_at
+                    });
+                });
+            }
+        }
+
+        // Sort reviews by created_at descending
+        allReviews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.status(200).json({
+            success: true,
+            data: allReviews,
+            error: null,
+            message: 'Reviews retrieved successfully'
+        });
+
+    } catch (error) {
+        console.error('Get business reviews error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};

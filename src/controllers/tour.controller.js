@@ -141,15 +141,32 @@ exports.searchTours = async (req, res) => {
 
 exports.createTour = async (req, res) => {
     try {
+        // Find the business profile associated with this user
+        const { data: business, error: bizError } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .single();
+
+        if (bizError || !business) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NO_BUSINESS,
+                message: 'No business profile found for this user'
+            });
+        }
+
         const tourData = {
             ...req.body,
             status: 'PENDING',
-            businesses_id: req.user.id
+            businesses_id: business.id
         };
 
         const { data, error } = await supabase
             .from('tours')
-            .insert([tourData]);
+            .insert([tourData])
+            .select('*');
 
         if (error) {
             return res.status(500).json({

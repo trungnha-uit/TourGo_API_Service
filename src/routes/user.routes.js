@@ -9,6 +9,7 @@ router.delete('/me', auth, userController.deleteUserAccount);
 
 router.post('/businesses/register', auth, userController.registerBusiness);
 router.get('/businesses/me', auth, businessAuth, userController.getMyBusiness);
+router.get('/businesses/me/listings', auth, businessAuth, userController.getMyListings);
 router.put('/businesses/me', auth, businessAuth, userController.updateBusinessProfile);
 router.delete('/businesses/me', auth, businessAuth, userController.deleteBusinessAccount);
 

@@ -1,4 +1,4 @@
-const supabase = require('../config/supabase');
+const supabase = require('../config/supabaseAuth');
 const ERROR_CODES = require('../constants/errorCodes');
 
 const auth = async (req, res, next) => {

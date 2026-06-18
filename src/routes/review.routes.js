@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 router.get('/', reviewController.getReviews);
+router.get('/business', auth, reviewController.getBusinessReviews);
 router.post('/', auth, reviewController.createReview);
 router.patch('/:id', auth, reviewController.updateReview);
 router.delete('/:id', auth, reviewController.deleteReview);
