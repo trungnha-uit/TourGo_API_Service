@@ -258,57 +258,57 @@ exports.getPendingBusinesses = async (req, res) => {
     }
 };
 
-exports.approveBusiness = async (req, res) => {try {
-        const { businessId } = req.params;
+exports.approveBusiness = async (req, res) => {
+    try {
+        // businessId ở đây thực chất là User ID được gửi từ App Android
+        const { businessId: userId } = req.params; 
         const adminId = req.user.id;
 
-        // 1. Lấy thông tin business để biết nó thuộc về User nào (user_id)
+        // 1. Tìm đơn đăng ký (business) của User này đang ở trạng thái pending
         const { data: businessData, error: fetchError } = await supabase
             .from('businesses')
-            .select('user_id, name')
-            .eq('id', businessId)
+            .select('id, user_id, name')
+            .eq('user_id', userId) // Tìm theo user_id
+            .eq('status', 'pending')
             .single();
 
         if (fetchError || !businessData) {
             return res.status(404).json({
                 success: false,
-                message: 'Không tìm thấy thông tin doanh nghiệp'
+                message: 'Không tìm thấy đơn đăng ký kinh doanh đang chờ của người dùng này'
             });
         }
 
-        // 2. Cập nhật trạng thái Business thành 'active'
+        // 2. Cập nhật trạng thái Business đó thành 'active'
         const { error: bizError } = await supabase
             .from('businesses')
             .update({ status: 'active', reviewed_by: adminId, reviewed_at: new Date() })
-            .eq('id', businessId);
+            .eq('id', businessData.id); // Update đúng ID của business
 
         if (bizError) throw bizError;
 
-        // 3. QUAN TRỌNG: Cập nhật role thành 'business' trong bảng users/profiles
+        // 3. Cập nhật role thành 'business' trong bảng 'users' (như bạn xác nhận)
         const { error: roleError } = await supabase
-            .from('users') // Hoặc 'profiles' tùy cấu trúc của bạn
+            .from('users') 
             .update({ role: 'business' })
-            .eq('id', businessData.user_id);
+            .eq('id', userId);
 
         if (roleError) console.error('Lỗi cập nhật role:', roleError.message);
 
-        // 4. Ghi nhật ký hệ thống
         await logAudit(req, `Approved business ${businessData.name}`, 'approve');
 
         res.status(200).json({
             success: true,
-            message: 'Phê duyệt doanh nghiệp thành công và đã nâng cấp quyền đối tác'
+            message: 'Đã phê duyệt đối tác và nâng cấp quyền thành công!'
         });
     } catch (error) {
         console.error('Approve business error:', error);
         res.status(500).json({
             success: false,
-            error: ERROR_CODES.SERVER_ERROR,
             message: error.message
         });
     }
 }
-
 exports.suspendBusiness = async (req, res) => {
     try {
         const { businessId } = req.params;
