@@ -267,6 +267,40 @@ exports.getPendingBusinesses = async (req, res) => {
     }
 };
 
+exports.getApprovedBusinesses = async (req, res) => {
+    try {
+        const { data: businesses, error } = await supabase
+            .from('businesses')
+            .select('*')
+            .eq('status', 'active')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: businesses || [],
+            error: null,
+            message: 'Approved businesses retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Get approved businesses error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
 exports.approveBusiness = async (req, res) => {
     try {
         const { businessId } = req.params; 

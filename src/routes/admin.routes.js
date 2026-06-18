@@ -9,6 +9,7 @@ router.put('/users/:userId/flagged', auth, adminOnly, adminController.flagUser);
 router.put('/users/:userId/activate', auth, adminOnly, adminController.activateUser);
 
 router.get('/businesses/pending', auth, adminOnly, adminController.getPendingBusinesses);
+router.get('/businesses/approved', auth, adminOnly, adminController.getApprovedBusinesses);
 router.put('/businesses/:businessId/approve', auth, adminOnly, adminController.approveBusiness);
 router.put('/businesses/:businessId/suspend', auth, adminOnly, adminController.suspendBusiness);
 router.put('/businesses/:businessId/reject', auth, adminOnly, adminController.rejectBusiness);
