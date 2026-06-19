@@ -33,10 +33,10 @@ app.use(require('./src/middleware/notFound'));
 app.use(require('./src/middleware/errorHandler'));
 
 const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`TourGo API Service is running on port ${PORT}`);
-    });
-}
+const HOST = '0.0.0.0';
+
+app.listen(PORT, HOST, () => {
+    console.log(`TourGo API Service is running on http://${HOST}:${PORT}`);
+});
 
 module.exports = app;
