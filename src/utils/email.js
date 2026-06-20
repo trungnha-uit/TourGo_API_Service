@@ -75,6 +75,22 @@ exports.sendBusinessApprovalEmail = async (toEmail, businessName) => {
     });
 };
 
+exports.sendAdminInviteEmail = async (toEmail, inviterName) => {
+    const by = inviterName ? ` bởi ${inviterName}` : '';
+    return sendMail({
+        to: toEmail,
+        subject: '[TourGo] Bạn đã được cấp quyền Quản trị viên (Admin)',
+        text: `Chào bạn,\n\nTài khoản của bạn (${toEmail}) vừa được nâng cấp lên quyền Quản trị viên (Admin) trên TourGo${by}.\n\nVui lòng đăng nhập lại vào ứng dụng để truy cập Bảng quản trị.\n\nTrân trọng,\nTourGo Team`,
+        html: `
+            <h3>Chào bạn,</h3>
+            <p>Tài khoản của bạn (<strong>${toEmail}</strong>) vừa được nâng cấp lên quyền <strong>Quản trị viên (Admin)</strong> trên TourGo${by}.</p>
+            <p>Vui lòng đăng nhập lại vào ứng dụng để truy cập Bảng quản trị.</p>
+            <br>
+            <p>Trân trọng,<br><strong>TourGo Team</strong></p>
+        `
+    });
+};
+
 exports.sendBusinessRejectionEmail = async (toEmail, businessName, reason) => {
     return sendMail({
         to: toEmail,

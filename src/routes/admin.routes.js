@@ -23,8 +23,20 @@ router.get('/reports', auth, adminOnly, adminController.getReports);
 router.put('/reports/:reportId/dismiss', auth, adminOnly, adminController.dismissReport);
 router.put('/reports/:reportId/resolve', auth, adminOnly, adminController.resolveReport);
 
-// Profile
+// Profile — team
 router.get('/team', auth, adminOnly, adminController.getTeam);
+router.post('/team/invite', auth, adminOnly, adminController.inviteAdmin);
+router.put('/team/:userId/role', auth, adminOnly, adminController.changeAdminRole);
+router.delete('/team/:userId', auth, adminOnly, adminController.removeAdmin);
+
+// Profile — audit log (paginated) + CSV export
+router.get('/audit-log/export', auth, adminOnly, adminController.exportAuditLog);
 router.get('/audit-log', auth, adminOnly, adminController.getAuditLog);
+
+// Profile — settings (moderation policy + notification preferences)
+router.get('/settings/moderation', auth, adminOnly, adminController.getModerationPolicy);
+router.put('/settings/moderation', auth, adminOnly, adminController.updateModerationPolicy);
+router.get('/settings/notifications', auth, adminOnly, adminController.getNotificationPrefs);
+router.put('/settings/notifications', auth, adminOnly, adminController.updateNotificationPrefs);
 
 module.exports = router;
