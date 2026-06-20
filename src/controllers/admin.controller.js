@@ -495,7 +495,9 @@ exports.getStats = async (req, res) => {
     try {
         const [users, businesses, listings, pendingListings, pendingBusinesses, reports, flagged] =
             await Promise.all([
-                countRows('users', [['role', 'user']]),
+                // Count every account, matching the Users directory (getAllUsers,
+                // which applies no role filter) so the dashboard total never lags it.
+                countRows('users', []),
                 countRows('businesses', [['status', 'active']]),
                 countRows('tours', []),
                 countRows('tours', [['status', 'PENDING']]),
