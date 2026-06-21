@@ -42,3 +42,4 @@ app.listen(PORT, HOST, () => {
 });
 
 module.exports = app;
+// Force restart nodemon
