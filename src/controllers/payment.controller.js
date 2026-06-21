@@ -222,8 +222,8 @@ exports.cassoWebhook = async (req, res) => {
             const amount = parseFloat(tx.amount) || 0;
 
             // Extract transaction_code từ description
-            // Format: "TG1718956789123456" hoặc có thể có text khác
-            const match = description.match(/TG\d{14}/);
+            // Format: "TG{timestamp}{6-hex}" VD: TG1719056789ABCD12
+            const match = description.match(/TG\d{13}[A-F0-9]{6}/i);
             if (!match) {
                 console.log('[Casso Webhook] No transaction code found in:', description);
                 continue;
