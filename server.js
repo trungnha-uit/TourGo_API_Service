@@ -28,6 +28,7 @@ app.use('/api/hotels', require('./src/routes/hotel.routes'));
 app.use('/api/bookings', require('./src/routes/booking.routes'));
 app.use('/api/favorites', require('./src/routes/favorite.routes'));
 app.use('/api/reviews', require('./src/routes/review.routes'));
+app.use('/api/notifications', require('./src/routes/notification.routes'));
 app.use('/api/payments', require('./src/routes/payment.routes'));
 app.use('/api/payouts', require('./src/routes/payout.routes'));
 

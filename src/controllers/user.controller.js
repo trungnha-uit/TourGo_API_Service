@@ -1,6 +1,7 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
 const emailService = require('../utils/email');
+const notificationService = require('../services/notification.service');
 
 exports.getCurrentUser = async (req, res) => {
     try {
@@ -326,6 +327,9 @@ exports.registerBusiness = async (req, res) => {
                 emailService.sendBusinessRegistrationEmail(req.user.email, data.name || req.body.name)
                     .catch(err => console.error('Failed to send registration email:', err));
 
+                // Let the admins know there's a fresh application waiting (best-effort).
+                notificationService.notifyAdminsBusinessPending(data);
+
                 return res.status(200).json({
                     success: true,
                     data: data,
@@ -357,6 +361,9 @@ exports.registerBusiness = async (req, res) => {
         // Send confirmation email asynchronously
         emailService.sendBusinessRegistrationEmail(req.user.email, data.name || req.body.name)
             .catch(err => console.error('Failed to send registration email:', err));
+
+        // Let the admins know there's a fresh application waiting (best-effort).
+        notificationService.notifyAdminsBusinessPending(data);
 
         res.status(201).json({
             success: true,

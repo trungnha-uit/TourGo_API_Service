@@ -8,6 +8,7 @@ const upload = require('../middleware/upload');
 router.get('/', hotelController.getAllHotels);
 router.get('/search', hotelController.searchHotels);
 router.get('/pending', auth, adminOnly, hotelController.getPendingHotels);
+router.get('/:id/unavailable-dates', hotelController.getUnavailableDates);
 router.get('/:id', hotelController.getHotelById);
 
 router.post('/', auth, businessesAuth, hotelController.createHotel);

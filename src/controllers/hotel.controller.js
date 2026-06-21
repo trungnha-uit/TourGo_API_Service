@@ -297,6 +297,125 @@ exports.rejectHotel = async (req, res) => {
     }
 };
 
+// ── Sold-out / unavailable nights for a hotel ───────────────────────────────
+// A night is "sold out" (hết phòng) when the number of active (non-cancelled)
+// bookings covering it reaches the hotel's room capacity. Hotels may declare
+// capacity via a `total_rooms` column; when it is absent we treat the hotel as
+// a single bookable unit so any booked night becomes unavailable.
+const DEFAULT_TOTAL_ROOMS = 1;
+
+// Parse a 'YYYY-MM-DD' (or longer ISO) string into a local midnight Date.
+// Returns null when the value is missing or malformed.
+function parseDateOnly(value) {
+    if (!value) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+// Format a Date back to a 'YYYY-MM-DD' key.
+function toDateKey(d) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+exports.getUnavailableDates = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Window defaults to today → today + 180 days; override via ?from & ?to.
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const from = parseDateOnly(req.query.from) || today;
+        let to = parseDateOnly(req.query.to);
+        if (!to) {
+            to = new Date(from);
+            to.setDate(to.getDate() + 180);
+        }
+
+        // Look up the hotel (and its optional capacity).
+        const { data: hotel, error: hotelError } = await supabase
+            .from('hotels')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (hotelError || !hotel) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Hotel not found'
+            });
+        }
+
+        const parsedRooms = parseInt(hotel.total_rooms, 10);
+        const totalRooms = parsedRooms > 0 ? parsedRooms : DEFAULT_TOTAL_ROOMS;
+
+        // Cancelled bookings free their rooms, so they are excluded.
+        const { data: bookings, error: bookingsError } = await supabase
+            .from('bookings')
+            .select('check_in, check_out, booking_date, status')
+            .eq('hotel_id', id)
+            .neq('status', 'CANCELLED');
+
+        if (bookingsError) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: bookingsError.message
+            });
+        }
+
+        // Tally how many bookings occupy each night within the window. A stay
+        // runs from check-in (inclusive) to check-out (exclusive).
+        const counts = {};
+        (bookings || []).forEach(b => {
+            const start = parseDateOnly(b.check_in || b.booking_date);
+            if (!start) return;
+            let end = parseDateOnly(b.check_out);
+            if (!end || end <= start) {
+                end = new Date(start);
+                end.setDate(end.getDate() + 1); // assume a single-night stay
+            }
+            for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+                if (d < from || d > to) continue;
+                const key = toDateKey(d);
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+
+        const unavailableDates = Object.keys(counts)
+            .filter(key => counts[key] >= totalRooms)
+            .sort();
+
+        res.status(200).json({
+            success: true,
+            data: {
+                hotel_id: id,
+                total_rooms: totalRooms,
+                from: toDateKey(from),
+                to: toDateKey(to),
+                unavailable_dates: unavailableDates,
+                counts
+            },
+            error: null,
+            message: 'Unavailable dates retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Get unavailable dates error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
+
 exports.uploadHotelImages = async (req, res) => {
     try {
         const { id } = req.params;
@@ -361,7 +480,7 @@ exports.uploadHotelImages = async (req, res) => {
             success: false,
             data: null,
             error: ERROR_CODES.SERVER_ERROR,
-            message: error.message
+            message: 'Internal server error'
         });
     }
 };

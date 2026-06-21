@@ -1,5 +1,8 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notifications = require('../services/notification.service');
+
+const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
 
 exports.createBooking = async (req, res) => {
     try {
@@ -23,6 +26,9 @@ exports.createBooking = async (req, res) => {
                 message: error.message
             });
         }
+
+        // Fan-out notifications (traveler + business owner). Best-effort.
+        await notifications.notifyBookingStatus(data);
 
         res.status(201).json({
             success: true,
@@ -136,6 +142,9 @@ exports.cancelBooking = async (req, res) => {
             });
         }
 
+        // Notify traveler + business owner of the cancellation. Best-effort.
+        await notifications.notifyBookingStatus(data);
+
         res.status(200).json({
             success: true,
             data: data,
@@ -154,17 +163,108 @@ exports.cancelBooking = async (req, res) => {
     }
 };
 
-exports.checkBooking = async (req, res) => {
+exports.updateBookingStatus = async (req, res) => {
     try {
-        const { hotelId } = req.query;
+        const { id } = req.params;
+        const newStatus = String(req.body.status || '').toUpperCase();
+
+        if (!BOOKING_STATUSES.includes(newStatus)) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: `Invalid booking status. Allowed: ${BOOKING_STATUSES.join(', ')}`
+            });
+        }
 
         const { data, error } = await supabase
             .from('bookings')
-            .select('id')
+            .update({ status: newStatus })
+            .eq('id', id)
             .eq('user_id', req.user.id)
-            .eq('hotel_id', hotelId)
-            .eq('status', 'COMPLETED')
-            .limit(1);
+            .select()
+            .single();
+
+        if (error || !data) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Booking not found'
+            });
+        }
+
+        // Notify traveler + business owner of the new status. Best-effort.
+        await notifications.notifyBookingStatus(data);
+
+        res.status(200).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Booking status updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update booking status error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
+
+// A booking counts as a *completed* trip when it was explicitly marked
+// COMPLETED, or it was paid/confirmed (i.e. not pending/cancelled) and its
+// check-out date has already passed. Pending (unpaid) and cancelled bookings
+// never count — the traveller has not actually taken the trip.
+function isTripCompleted(b) {
+    if (!b) return false;
+    const status = String(b.status || '').toUpperCase();
+    if (status === 'CANCELLED' || status === 'PENDING') return false;
+    if (status === 'COMPLETED') return true;
+
+    const end = (() => {
+        const raw = b.check_out || b.booking_date || b.check_in;
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw || ''));
+        if (!m) return null;
+        const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])); // local midnight
+        return isNaN(d.getTime()) ? null : d;
+    })();
+    if (!end) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return end <= today; // the stay/tour has ended
+}
+
+// GET /api/bookings/check?hotelId=… | ?tourId=…
+// Tells the client whether the signed-in user has *completed* a stay at the
+// given hotel or a trip on the given tour — used to gate review writing
+// ("đã hoàn thành hay chưa") and to surface a completed badge.
+exports.checkBooking = async (req, res) => {
+    try {
+        const { hotelId, tourId } = req.query;
+
+        if (!hotelId && !tourId) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_PARAMETER,
+                message: 'hotelId or tourId query parameter is required'
+            });
+        }
+
+        const column = hotelId ? 'hotel_id' : 'tour_id';
+        const value = hotelId || tourId;
+
+        const { data, error } = await supabase
+            .from('bookings')
+            .select('id, status, check_in, check_out, booking_date')
+            .eq('user_id', req.user.id)
+            .eq(column, value)
+            .neq('status', 'CANCELLED');
 
         if (error) {
             return res.status(500).json({
@@ -175,10 +275,16 @@ exports.checkBooking = async (req, res) => {
             });
         }
 
+        const isCompleted = (data || []).some(isTripCompleted);
+
         res.status(200).json({
             success: true,
             data: {
-                hasBooked: data && data.length > 0
+                // hasBooked stays the gate for reviews (kept for backward compat);
+                // it is true only once the trip is actually completed.
+                hasBooked: isCompleted,
+                isCompleted: isCompleted,
+                bookingCount: data ? data.length : 0
             },
             error: null,
             message: 'Check completed successfully'
