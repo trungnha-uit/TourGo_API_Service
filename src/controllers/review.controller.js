@@ -27,7 +27,7 @@ exports.getReviews = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 data: null,
-                error: Error_CODES.MISSING_PARAMETER,
+                error: ERROR_CODES.MISSING_PARAMETER,
                 message: 'Either hotelId or tourId is required'
             });
         }
