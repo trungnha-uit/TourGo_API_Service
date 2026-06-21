@@ -46,51 +46,35 @@ exports.updateUserProfile = async (req, res) => {
             ...req.body
         };
 
-        // Upload avatar nếu có
+        let oldAvatar = null;
+
         if (req.file) {
 
-            // Lấy avatar cũ
             const {
                 data: oldUser
-            } = await supabase
-                .from('users')
-                .select('avatar')
-                .eq('id', userId)
-                .single();
+            } =
+                await supabase
+                    .from('users')
+                    .select('avatar')
+                    .eq('id', userId)
+                    .single();
 
-            // Xóa avatar cũ
-            if (oldUser?.avatar) {
+            oldAvatar =
+                oldUser?.avatar;
 
-                const marker =
-                    '/storage/v1/object/public/avatars/';
-
-                const idx =
-                    oldUser.avatar.indexOf(marker);
-
-                if (idx !== -1) {
-
-                    const oldPath =
-                        oldUser.avatar.substring(
-                            idx + marker.length
-                        );
-
-                    await supabase.storage
-                        .from('avatars')
-                        .remove([oldPath]);
-                }
-            }
-
-            // Upload mới
+            // Upload mới trước
             const ext =
-                req.file.mimetype.split('/')[1];
+                req.file.mimetype
+                    .split('/')[1];
 
             const fileName =
-                `users/${userId}/${Date.now()}.${ext}`;
+                `${userId}/${Date.now()}.${ext}`;
 
             const {
                 error: uploadError
             } =
-                await supabase.storage
+                await supabase
+                    .storage
                     .from('avatars')
                     .upload(
                         fileName,
@@ -110,47 +94,90 @@ exports.updateUserProfile = async (req, res) => {
                     publicUrl
                 }
             } =
-                supabase.storage
+                supabase
+                    .storage
                     .from('avatars')
-                    .getPublicUrl(fileName);
+                    .getPublicUrl(
+                        fileName
+                    );
 
             updateData.avatar =
                 publicUrl;
         }
 
+        // Update DB
         const {
             data,
             error
-        } = await supabase
-            .from('users')
-            .update(updateData)
-            .eq('id', userId)
-            .select()
-            .single();
+        } =
+            await supabase
+                .from('users')
+                .update(updateData)
+                .eq(
+                    'id',
+                    userId
+                )
+                .select()
+                .single();
 
         if (error)
             throw error;
 
-        res.status(200).json({
-            success: true,
-            data,
-            error: null,
-            message:
-                'Profile updated successfully'
-        });
+        // Xóa avatar cũ sau khi update thành công
+        if (
+            req.file &&
+            oldAvatar
+        ) {
+
+            const marker =
+                '/storage/v1/object/public/avatars/';
+
+            const idx =
+                oldAvatar.indexOf(
+                    marker
+                );
+
+            if (idx !== -1) {
+
+                const oldPath =
+                    oldAvatar.substring(
+                        idx +
+                        marker.length
+                    );
+
+                await supabase
+                    .storage
+                    .from(
+                        'avatars'
+                    )
+                    .remove([
+                        oldPath
+                    ]);
+            }
+        }
+
+        res.status(200)
+            .json({
+                success: true,
+                data,
+                error: null,
+                message:
+                    'Profile updated successfully'
+            });
 
     } catch (error) {
 
         console.error(error);
 
-        res.status(500).json({
-            success: false,
-            data: null,
-            error:
-                ERROR_CODES.SERVER_ERROR,
-            message:
-                error.message
-        });
+        res.status(500)
+            .json({
+                success: false,
+                data: null,
+                error:
+                    ERROR_CODES.SERVER_ERROR,
+                message:
+                    error.message
+            });
     }
 };
 
