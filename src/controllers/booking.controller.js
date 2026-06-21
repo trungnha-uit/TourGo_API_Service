@@ -1,5 +1,8 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notifications = require('../services/notification.service');
+
+const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
 
 exports.createBooking = async (req, res) => {
     try {
@@ -23,6 +26,9 @@ exports.createBooking = async (req, res) => {
                 message: error.message
             });
         }
+
+        // Fan-out notifications (traveler + business owner). Best-effort.
+        await notifications.notifyBookingStatus(data);
 
         res.status(201).json({
             success: true,
@@ -136,6 +142,9 @@ exports.cancelBooking = async (req, res) => {
             });
         }
 
+        // Notify traveler + business owner of the cancellation. Best-effort.
+        await notifications.notifyBookingStatus(data);
+
         res.status(200).json({
             success: true,
             data: data,
@@ -145,6 +154,58 @@ exports.cancelBooking = async (req, res) => {
 
     } catch (error) {
         console.error('Cancel booking error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
+
+exports.updateBookingStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const newStatus = String(req.body.status || '').toUpperCase();
+
+        if (!BOOKING_STATUSES.includes(newStatus)) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: `Invalid booking status. Allowed: ${BOOKING_STATUSES.join(', ')}`
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('bookings')
+            .update({ status: newStatus })
+            .eq('id', id)
+            .eq('user_id', req.user.id)
+            .select()
+            .single();
+
+        if (error || !data) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Booking not found'
+            });
+        }
+
+        // Notify traveler + business owner of the new status. Best-effort.
+        await notifications.notifyBookingStatus(data);
+
+        res.status(200).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Booking status updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update booking status error:', error);
         res.status(500).json({
             success: false,
             data: null,

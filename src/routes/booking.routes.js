@@ -8,5 +8,6 @@ router.get('/check', auth, bookingController.checkBooking);
 router.get('/business', auth, bookingController.getBusinessBookings);
 router.get('/:id', auth, bookingController.getBookingById);
 router.patch('/:id/cancel', auth, bookingController.cancelBooking);
+router.patch('/:id/status', auth, bookingController.updateBookingStatus);
 
 module.exports = router;

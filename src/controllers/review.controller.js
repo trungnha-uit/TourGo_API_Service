@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notifications = require('../services/notification.service');
 
 async function checkBookingCompleted(userId, hotelId, tourId) {
     const query = supabase
@@ -145,6 +146,9 @@ exports.createReview = async (req, res) => {
                 message: error.message
             });
         }
+
+        // Notify the business owner of the new review. Best-effort.
+        await notifications.notifyReviewCreated(data, hotel_id ? 'hotel' : 'tour');
 
         res.status(201).json({
             success: true,
