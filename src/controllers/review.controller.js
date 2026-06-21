@@ -131,9 +131,12 @@ exports.createReview = async (req, res) => {
             user_id: userId
         };
 
-        const { data, error } = await supabase
+        // Tách image_urls ra khỏi reviewData trước khi insert vào bảng review chính
+        const { image_urls, ...reviewCoreData } = reviewData;
+
+        const { data: newReview, error } = await supabase
             .from(tableName)
-            .insert([reviewData])
+            .insert([reviewCoreData])
             .select()
             .single();
 
@@ -146,9 +149,38 @@ exports.createReview = async (req, res) => {
             });
         }
 
+        // Nếu có ảnh, lưu các URL ảnh vào bảng tương ứng
+        if (image_urls && image_urls.length > 0 && newReview) {
+            const imageTableName = hotel_id ? 'hotel_review_images' : 'tour_review_images';
+            const reviewIdColumn = hotel_id ? 'hotel_review_id' : 'tour_review_id';
+
+            const imagesToInsert = image_urls.map(url => ({
+                [reviewIdColumn]: newReview.id,
+                image_url: url
+            }));
+
+            const { data: insertedImages, error: imageError } = await supabase
+                .from(imageTableName)
+                .insert(imagesToInsert)
+                .select(); // Thêm .select() để lấy dữ liệu đã chèn
+
+            if (imageError) {
+                console.error('Error saving review images:', imageError);
+                // Trả về lỗi nếu không thể lưu ảnh, hoặc ít nhất là cảnh báo rõ ràng
+                return res.status(500).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.SERVER_ERROR,
+                    message: `Review created, but failed to save images: ${imageError.message}`
+                });
+            }
+            // Nếu muốn trả về cả thông tin ảnh đã lưu, bạn có thể thêm vào newReview
+            // newReview.images = insertedImages;
+        }
+
         res.status(201).json({
             success: true,
-            data: data,
+            data: newReview,
             error: null,
             message: 'Review created successfully'
         });
