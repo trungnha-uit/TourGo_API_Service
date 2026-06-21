@@ -296,3 +296,72 @@ exports.rejectHotel = async (req, res) => {
         });
     }
 };
+
+exports.uploadHotelImages = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.MISSING_FILE,
+                message: 'No image file uploaded'
+            });  
+        }
+
+        const file = req.file;
+        const fileExt = file.mimetype.split('/')[1];
+        const fileName = `hotel/${id}/${Date.now()}.${fileExt}`;
+
+        const { data, error } = await supabase
+            .storage
+            .from('hotel-images')
+            .upload(fileName, file.buffer, {
+                contentType: file.mimetype
+            });
+            
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('hotel-images')
+            .getPublicUrl(fileName);
+
+        // Insert image record into the database table
+        const { error: dbError } = await supabase
+            .from('hotel_images')
+            .insert([{ hotel_id: id, image_url: publicUrl }]);
+
+        if (dbError) {
+            console.error('Save hotel image DB error:', dbError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: dbError.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: { imageUrl: publicUrl, fileName: fileName },
+            error: null,
+            message: 'Image uploaded successfully'
+        });
+    } catch (error) {
+        console.error('Upload hotel image error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};

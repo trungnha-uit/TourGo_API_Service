@@ -231,6 +231,21 @@ exports.uploadTourImages = async (req, res) => {
             .from('tour-images')
             .getPublicUrl(fileName);
 
+        // Insert image record into the database table
+        const { error: dbError } = await supabase
+            .from('tour_images')
+            .insert([{ tour_id: id, image_url: publicUrl }]);
+
+        if (dbError) {
+            console.error('Save tour image DB error:', dbError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: dbError.message
+            });
+        }
+
         res.status(200).json({
             success: true,
             data: { imageUrl: publicUrl, fileName: fileName },

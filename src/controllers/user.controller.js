@@ -586,7 +586,7 @@ exports.getMyListings = async (req, res) => {
                     name: t.name,
                     location: t.destination || t.address || '',
                     price: t.price || 0,
-                    status: (t.status || 'pending').toLowerCase(),
+                    status: t.status === 'APPROVED' ? 'active' : (t.status || 'pending').toLowerCase(),
                     category: 'tour',
                     created_at: t.created_at
                 });
@@ -599,7 +599,7 @@ exports.getMyListings = async (req, res) => {
                     name: h.name,
                     location: h.address || '',
                     price: h.price_per_night || 0,
-                    status: 'active',
+                    status: h.status === 'APPROVED' ? 'active' : (h.status || 'pending').toLowerCase(),
                     category: 'hotel',
                     created_at: h.created_at
                 });
