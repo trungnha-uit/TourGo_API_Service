@@ -39,36 +39,117 @@ exports.getCurrentUser = async (req, res) => {
 
 exports.updateUserProfile = async (req, res) => {
     try {
-        const { data, error } = await supabase
+
+        const userId = req.user.id;
+
+        let updateData = {
+            ...req.body
+        };
+
+        // Upload avatar nếu có
+        if (req.file) {
+
+            // Lấy avatar cũ
+            const {
+                data: oldUser
+            } = await supabase
+                .from('users')
+                .select('avatar')
+                .eq('id', userId)
+                .single();
+
+            // Xóa avatar cũ
+            if (oldUser?.avatar) {
+
+                const marker =
+                    '/storage/v1/object/public/avatars/';
+
+                const idx =
+                    oldUser.avatar.indexOf(marker);
+
+                if (idx !== -1) {
+
+                    const oldPath =
+                        oldUser.avatar.substring(
+                            idx + marker.length
+                        );
+
+                    await supabase.storage
+                        .from('avatars')
+                        .remove([oldPath]);
+                }
+            }
+
+            // Upload mới
+            const ext =
+                req.file.mimetype.split('/')[1];
+
+            const fileName =
+                `users/${userId}/${Date.now()}.${ext}`;
+
+            const {
+                error: uploadError
+            } =
+                await supabase.storage
+                    .from('avatars')
+                    .upload(
+                        fileName,
+                        req.file.buffer,
+                        {
+                            contentType:
+                                req.file.mimetype,
+                            upsert: false
+                        }
+                    );
+
+            if (uploadError)
+                throw uploadError;
+
+            const {
+                data: {
+                    publicUrl
+                }
+            } =
+                supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(fileName);
+
+            updateData.avatar =
+                publicUrl;
+        }
+
+        const {
+            data,
+            error
+        } = await supabase
             .from('users')
-            .update(req.body)
-            .eq('id', req.user.id)
-            .select('*')
+            .update(updateData)
+            .eq('id', userId)
+            .select()
             .single();
 
-        if (error || !data) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.SERVER_ERROR,
-                message: error?.message || 'Update failed'
-            });
-        }
+        if (error)
+            throw error;
 
         res.status(200).json({
             success: true,
-            data: data,
+            data,
             error: null,
-            message: 'Profile updated successfully'
+            message:
+                'Profile updated successfully'
         });
 
     } catch (error) {
-        console.error('Update profile error:', error);
+
+        console.error(error);
+
         res.status(500).json({
             success: false,
             data: null,
-            error: ERROR_CODES.SERVER_ERROR,
-            message: 'Internal server error'
+            error:
+                ERROR_CODES.SERVER_ERROR,
+            message:
+                error.message
         });
     }
 };
