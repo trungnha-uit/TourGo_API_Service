@@ -24,10 +24,20 @@ exports.createPayment = async (req, res) => {
             });
         }
 
-        // Verify booking belongs to user
+        // Verify booking belongs to user và lấy thông tin để tính toán
         const { data: booking, error: bookingError } = await supabase
             .from('bookings')
-            .select('id, user_id, status')
+            .select(`
+                id,
+                user_id,
+                status,
+                check_in,
+                check_out,
+                hotel_id,
+                tour_id,
+                hotels(price_per_night),
+                tours(price)
+            `)
             .eq('id', bookingId)
             .eq('user_id', userId)
             .single();
@@ -50,6 +60,36 @@ exports.createPayment = async (req, res) => {
             });
         }
 
+        // Tính lại số tiền từ booking (backend là source of truth)
+        const checkIn = new Date(booking.check_in);
+        const checkOut = new Date(booking.check_out);
+        const nights = Math.ceil((checkOut - checkIn) / (24 * 60 * 60 * 1000));
+
+        const pricePerNight = booking.hotel_id
+            ? (booking.hotels?.price_per_night || 0)
+            : (booking.tours?.price || 0);
+
+        const roomPrice = pricePerNight * nights;
+        const taxRate = parseFloat(process.env.TAX_RATE || '0.1');
+        const taxes = roomPrice * taxRate;
+        const serviceCharge = parseFloat(process.env.SERVICE_CHARGE || '50000');
+        const calculatedAmount = roomPrice + taxes + serviceCharge;
+
+        // Verify amount từ client (tolerance từ env)
+        const tolerance = parseFloat(process.env.AMOUNT_TOLERANCE || '1000');
+        if (Math.abs(amount - calculatedAmount) > tolerance) {
+            console.warn(`[Payment] Amount mismatch. Client: ${amount}, Calculated: ${calculatedAmount}`);
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: `Invalid amount. Expected: ${calculatedAmount}`
+            });
+        }
+
+        // Dùng số tiền tính toán từ backend
+        const finalAmount = calculatedAmount;
+
         const transactionCode = generateTransactionCode();
 
         // Verify uniqueness (retry nếu trùng - cực kỳ hiếm)
@@ -66,7 +106,7 @@ exports.createPayment = async (req, res) => {
                 .insert([{
                     transaction_code: code,
                     booking_id: bookingId,
-                    amount: amount,
+                    amount: finalAmount, // Dùng số tiền backend tính
                     type: paymentMethod.toUpperCase(),
                     status: 'PENDING',
                     user_id: userId,
@@ -106,10 +146,10 @@ exports.createPayment = async (req, res) => {
                     payment_method: 'bank_transfer',
                     transaction_code: payment.transaction_code,
                     bank_info: {
-                        bank_name: 'BIDV',
-                        account_number: 'V3CASS0931215748',
-                        account_holder: 'TOURGO PAYMENT',
-                        amount: amount,
+                        bank_name: process.env.BANK_NAME || 'BIDV',
+                        account_number: process.env.BANK_ACCOUNT_NUMBER || 'V3CASS0931215748',
+                        account_holder: process.env.BANK_ACCOUNT_HOLDER || 'TOURGO PAYMENT',
+                        amount: finalAmount, // Số tiền backend tính
                         transfer_note: payment.transaction_code
                     }
                 },
