@@ -39,37 +39,194 @@ exports.getCurrentUser = async (req, res) => {
 
 exports.updateUserProfile = async (req, res) => {
     try {
-        const { data, error } = await supabase
-            .from('users')
-            .update(req.body)
-            .eq('id', req.user.id)
-            .select('*')
-            .single();
 
-        if (error || !data) {
-            return res.status(400).json({
+        const userId = req.user.id;
+
+        let updateData = {
+            ...req.body
+        };
+
+        let oldAvatar = null;
+        let uploadedPath = null;
+
+        // Lấy user hiện tại
+        const {
+            data: oldUser,
+            error: oldUserError
+        } = await supabase
+            .from('users')
+            .select('avatar')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (oldUserError) {
+            throw oldUserError;
+        }
+
+        if (!oldUser) {
+            return res.status(404).json({
                 success: false,
                 data: null,
-                error: ERROR_CODES.SERVER_ERROR,
-                message: error?.message || 'Update failed'
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'User not found'
             });
         }
 
-        res.status(200).json({
-            success: true,
-            data: data,
-            error: null,
-            message: 'Profile updated successfully'
-        });
+        oldAvatar = oldUser.avatar;
+
+        // Upload avatar mới
+        if (req.file) {
+
+            const ext =
+                req.file.originalname
+                    .split('.')
+                    .pop();
+
+            uploadedPath =
+                `${userId}/${Date.now()}.${ext}`;
+
+            const {
+                error: uploadError
+            } =
+                await supabase
+                    .storage
+                    .from('avatars')
+                    .upload(
+                        uploadedPath,
+                        req.file.buffer,
+                        {
+                            contentType:
+                                req.file.mimetype,
+                            upsert: true
+                        }
+                    );
+
+            if (uploadError) {
+                throw uploadError;
+            }
+
+            const {
+                data: {
+                    publicUrl
+                }
+            } =
+                supabase
+                    .storage
+                    .from('avatars')
+                    .getPublicUrl(
+                        uploadedPath
+                    );
+
+            updateData.avatar =
+                publicUrl;
+        }
+
+        // Update DB
+        const {
+            data,
+            error
+        } =
+            await supabase
+                .from('users')
+                .update(updateData)
+                .eq(
+                    'id',
+                    userId
+                )
+                .select()
+                .maybeSingle();
+
+        // rollback nếu update fail
+        if (error || !data) {
+
+            if (uploadedPath) {
+
+                await supabase
+                    .storage
+                    .from('avatars')
+                    .remove([
+                        uploadedPath
+                    ]);
+            }
+
+            throw error ||
+                new Error(
+                    'Update failed'
+                );
+        }
+
+        // Xóa avatar cũ
+        if (
+            req.file &&
+            oldAvatar
+        ) {
+
+            const marker =
+                '/storage/v1/object/public/avatars/';
+
+            const idx =
+                oldAvatar.indexOf(
+                    marker
+                );
+
+            if (idx !== -1) {
+
+                const oldPath =
+                    oldAvatar.substring(
+                        idx +
+                        marker.length
+                    );
+
+                try {
+
+                    await supabase
+                        .storage
+                        .from(
+                            'avatars'
+                        )
+                        .remove([
+                            oldPath
+                        ]);
+
+                } catch (
+                    deleteErr
+                ) {
+
+                    console.warn(
+                        'Delete old avatar failed:',
+                        deleteErr.message
+                    );
+                }
+            }
+        }
+
+        return res
+            .status(200)
+            .json({
+                success: true,
+                data,
+                error: null,
+                message:
+                    'Profile updated successfully'
+            });
 
     } catch (error) {
-        console.error('Update profile error:', error);
-        res.status(500).json({
-            success: false,
-            data: null,
-            error: ERROR_CODES.SERVER_ERROR,
-            message: 'Internal server error'
-        });
+
+        console.error(
+            'Update profile error:',
+            error
+        );
+
+        return res
+            .status(500)
+            .json({
+                success: false,
+                data: null,
+                error:
+                    ERROR_CODES.SERVER_ERROR,
+                message:
+                    error.message
+            });
     }
 };
 

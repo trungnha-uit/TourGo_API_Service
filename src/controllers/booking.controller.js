@@ -341,3 +341,52 @@ exports.getBusinessBookings = async (req, res) => {
         });
     }
 };
+
+exports.updateBookingStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Missing status'
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('bookings')
+            .update({ status: status.toUpperCase() })
+            .eq('id', id)
+            .eq('user_id', req.user.id)
+            .select()
+            .single();
+
+        if (error || !data) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Booking not found or unauthorized'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Booking status updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update booking status error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
