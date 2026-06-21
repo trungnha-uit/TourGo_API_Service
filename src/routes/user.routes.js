@@ -37,10 +37,13 @@ router.post(
     userController.registerBusiness
 );
 
+// Business registration detail — returns the user's own application for ANY
+// status (pending / rejected / active) so the registration-detail screen can
+// show its full contents. Intentionally NOT behind businessAuth, which would
+// reject not-yet-approved applicants and hide their details.
 router.get(
     '/businesses/me',
     auth,
-    businessAuth,
     userController.getMyBusiness
 );
 
