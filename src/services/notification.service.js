@@ -159,9 +159,45 @@ async function notifyReviewCreated(review, type) {
     }
 }
 
+/**
+ * Notify every admin that a business registration is awaiting approval. Fans out
+ * one row per admin (source_key is globally unique, so the admin id is part of the
+ * key). The submission timestamp is included too, so a re-application after a
+ * rejection produces a fresh notification rather than colliding with the old one.
+ */
+async function notifyAdminsBusinessPending(business) {
+    try {
+        if (!business || !business.id) return;
+
+        const { data: admins, error } = await supabase
+            .from('users')
+            .select('id')
+            .eq('role', 'admin');
+        if (error || !admins || admins.length === 0) return;
+
+        const bizName = business.name || 'Doanh nghiệp mới';
+        const submittedAt = business.created_at || '';
+        for (const admin of admins) {
+            await createNotification({
+                userId: admin.id,
+                role: 'ADMIN',
+                category: 'approvals',
+                title: 'Doanh nghiệp mới chờ duyệt',
+                body: bizName,
+                icon: 'shield_check',
+                sourceKey: `business:${business.id}:pending:${submittedAt}:${admin.id}`,
+                data: { business_id: business.id },
+            });
+        }
+    } catch (e) {
+        console.warn('notifyAdminsBusinessPending failed:', e.message);
+    }
+}
+
 module.exports = {
     createNotification,
     resolveListingOwner,
     notifyBookingStatus,
     notifyReviewCreated,
+    notifyAdminsBusinessPending,
 };
