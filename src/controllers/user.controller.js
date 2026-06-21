@@ -47,27 +47,42 @@ exports.updateUserProfile = async (req, res) => {
         };
 
         let oldAvatar = null;
+        let uploadedPath = null;
 
+        // Lấy user hiện tại
+        const {
+            data: oldUser,
+            error: oldUserError
+        } = await supabase
+            .from('users')
+            .select('avatar')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (oldUserError) {
+            throw oldUserError;
+        }
+
+        if (!oldUser) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'User not found'
+            });
+        }
+
+        oldAvatar = oldUser.avatar;
+
+        // Upload avatar mới
         if (req.file) {
 
-            const {
-                data: oldUser
-            } =
-                await supabase
-                    .from('users')
-                    .select('avatar')
-                    .eq('id', userId)
-                    .single();
-
-            oldAvatar =
-                oldUser?.avatar;
-
-            // Upload mới trước
             const ext =
-                req.file.mimetype
-                    .split('/')[1];
+                req.file.originalname
+                    .split('.')
+                    .pop();
 
-            const fileName =
+            uploadedPath =
                 `${userId}/${Date.now()}.${ext}`;
 
             const {
@@ -77,17 +92,18 @@ exports.updateUserProfile = async (req, res) => {
                     .storage
                     .from('avatars')
                     .upload(
-                        fileName,
+                        uploadedPath,
                         req.file.buffer,
                         {
                             contentType:
                                 req.file.mimetype,
-                            upsert: false
+                            upsert: true
                         }
                     );
 
-            if (uploadError)
+            if (uploadError) {
                 throw uploadError;
+            }
 
             const {
                 data: {
@@ -98,7 +114,7 @@ exports.updateUserProfile = async (req, res) => {
                     .storage
                     .from('avatars')
                     .getPublicUrl(
-                        fileName
+                        uploadedPath
                     );
 
             updateData.avatar =
@@ -118,12 +134,28 @@ exports.updateUserProfile = async (req, res) => {
                     userId
                 )
                 .select()
-                .single();
+                .maybeSingle();
 
-        if (error)
-            throw error;
+        // rollback nếu update fail
+        if (error || !data) {
 
-        // Xóa avatar cũ sau khi update thành công
+            if (uploadedPath) {
+
+                await supabase
+                    .storage
+                    .from('avatars')
+                    .remove([
+                        uploadedPath
+                    ]);
+            }
+
+            throw error ||
+                new Error(
+                    'Update failed'
+                );
+        }
+
+        // Xóa avatar cũ
         if (
             req.file &&
             oldAvatar
@@ -145,18 +177,31 @@ exports.updateUserProfile = async (req, res) => {
                         marker.length
                     );
 
-                await supabase
-                    .storage
-                    .from(
-                        'avatars'
-                    )
-                    .remove([
-                        oldPath
-                    ]);
+                try {
+
+                    await supabase
+                        .storage
+                        .from(
+                            'avatars'
+                        )
+                        .remove([
+                            oldPath
+                        ]);
+
+                } catch (
+                    deleteErr
+                ) {
+
+                    console.warn(
+                        'Delete old avatar failed:',
+                        deleteErr.message
+                    );
+                }
             }
         }
 
-        res.status(200)
+        return res
+            .status(200)
             .json({
                 success: true,
                 data,
@@ -167,9 +212,13 @@ exports.updateUserProfile = async (req, res) => {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            'Update profile error:',
+            error
+        );
 
-        res.status(500)
+        return res
+            .status(500)
             .json({
                 success: false,
                 data: null,

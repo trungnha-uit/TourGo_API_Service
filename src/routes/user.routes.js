@@ -10,7 +10,7 @@ const businessAuth =
 require('../middleware/businessesAuth');
 
 const upload =
-require('../middleware/upload'); // thêm
+require('../middleware/upload');
 
 router.get(
     '/me',
@@ -21,7 +21,7 @@ router.get(
 router.put(
     '/me',
     auth,
-    upload.single('file'), // thêm
+    upload.single('avatar'), // sửa file -> avatar
     userController.updateUserProfile
 );
 
