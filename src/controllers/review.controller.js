@@ -313,13 +313,79 @@ exports.deleteReview = async (req, res) => {
             });
         }
 
-        const tableName = type === 'hotel' ? 'hotel_reviews' : 'tour_reviews';
+        const reviewTable =
+            type === 'hotel'
+                ? 'hotel_reviews'
+                : 'tour_reviews';
 
-        const { error } = await supabase
-            .from(tableName)
-            .delete()
-            .eq('id', id)
-            .eq('user_id', req.user.id);
+        const imageTable =
+            type === 'hotel'
+                ? 'hotel_review_images'
+                : 'tour_review_images';
+
+        // 1. Lấy danh sách ảnh
+        const { data: images, error: imageFetchError } =
+            await supabase
+                .from(imageTable)
+                .select('image_url')
+                .eq('review_id', id);
+
+        if (imageFetchError) {
+            throw imageFetchError;
+        }
+
+        // 2. Xóa file khỏi storage
+        if (images?.length) {
+
+            const files = images
+                .map(i => {
+                    const marker =
+                        '/storage/v1/object/public/review-images/';
+
+                    const idx =
+                        i.image_url.indexOf(marker);
+
+                    if (idx === -1) return null;
+
+                    return i.image_url.substring(
+                        idx + marker.length
+                    );
+                })
+                .filter(Boolean);
+
+            console.log('Files to remove:', files);
+
+            if (files.length) {
+                const {
+                    error: storageError
+                } = await supabase.storage
+                    .from('review-images')
+                    .remove(files);
+
+                if (storageError) {
+                    console.error(
+                        'Storage delete error:',
+                        storageError
+                    );
+
+                    return res.status(500).json({
+                        success: false,
+                        data: null,
+                        error: ERROR_CODES.SERVER_ERROR,
+                        message:
+                            'Failed to delete review images'
+                    });
+                }
+            }
+        }
+
+        // 3. Xóa review (cascade xóa bảng image)
+        const { error } =
+            await supabase
+                .from(reviewTable)
+                .delete()
+                .eq('id', id)
+                .eq('user_id', req.user.id);
 
         if (error) {
             return res.status(404).json({
@@ -334,16 +400,18 @@ exports.deleteReview = async (req, res) => {
             success: true,
             data: null,
             error: null,
-            message: 'Review deleted successfully'
+            message:
+                'Review and images deleted successfully'
         });
 
     } catch (error) {
-        console.error('Delete review error:', error);
+        console.error(error);
+
         res.status(500).json({
             success: false,
             data: null,
             error: ERROR_CODES.SERVER_ERROR,
-            message: 'Internal server error'
+            message: error.message
         });
     }
 };
