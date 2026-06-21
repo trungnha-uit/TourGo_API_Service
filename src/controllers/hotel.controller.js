@@ -6,6 +6,7 @@ exports.getAllHotels = async (req, res) => {
         const { data, error } = await supabase
             .from('hotels')
             .select('*, hotel_images(*)')
+            .eq('status', 'APPROVED')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -78,7 +79,8 @@ exports.searchHotels = async (req, res) => {
 
         let query = supabase
             .from('hotels')
-            .select('*, hotel_images(*)');
+            .select('*, hotel_images(*)')
+            .eq('status', 'APPROVED');
 
         if (q) {
             query = query.ilike('name', `%${q}%`);
@@ -155,7 +157,8 @@ exports.createHotel = async (req, res) => {
             businesses_id: business.id,
             open_from: req.body.open_from || null,
             open_until: req.body.open_until || null,
-            blocked_dates: req.body.blocked_dates || null
+            blocked_dates: req.body.blocked_dates || null,
+            status: 'PENDING'
         };
 
         const { data, error } = await supabase
@@ -186,6 +189,110 @@ exports.createHotel = async (req, res) => {
             data: null,
             error: ERROR_CODES.SERVER_ERROR,
             message: 'Internal server error'
+        });
+    }
+};
+
+exports.getPendingHotels = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('hotels')
+            .select('*, hotel_images(*)')
+            .eq('status', 'PENDING')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: data,
+            error: null,
+            message: 'Pending hotels retrieved successfully'
+        });
+    } catch (error) {
+        console.error('Get pending hotels error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
+exports.approveHotel = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('hotels')
+            .update({ status: 'APPROVED' })
+            .eq('id', id);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Hotel approved successfully'
+        });
+    } catch (error) {
+        console.error('Approve hotel error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};
+
+exports.rejectHotel = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { error } = await supabase
+            .from('hotels')
+            .update({ status: 'REJECTED' })
+            .eq('id', id);
+
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: error.message
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Hotel rejected successfully'
+        });
+    } catch (error) {
+        console.error('Reject hotel error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
         });
     }
 };
