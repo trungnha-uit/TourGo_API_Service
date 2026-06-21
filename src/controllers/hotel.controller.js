@@ -152,7 +152,10 @@ exports.createHotel = async (req, res) => {
             price_per_night: req.body.price,
             address: req.body.city ? (req.body.address + ", " + req.body.city) : req.body.address,
             amenities: Array.isArray(req.body.amenities) ? req.body.amenities.join(', ') : req.body.amenities,
-            businesses_id: business.id
+            businesses_id: business.id,
+            open_from: req.body.open_from || null,
+            open_until: req.body.open_until || null,
+            blocked_dates: req.body.blocked_dates || null
         };
 
         const { data, error } = await supabase
