@@ -232,10 +232,21 @@ exports.cassoWebhook = async (req, res) => {
             const transactionCode = match[0];
             console.log('[Casso Webhook] Found transaction code:', transactionCode);
 
-            // Tìm transaction trong DB
+            // Tìm transaction trong DB với business info
             const { data: payment, error: txError } = await supabase
                 .from('payments')
-                .select('*, bookings(id, user_id, status)')
+                .select(`
+                    *,
+                    bookings(
+                        id,
+                        user_id,
+                        status,
+                        hotel_id,
+                        tour_id,
+                        hotels(businesses_id, businesses(commission_rate)),
+                        tours(businesses_id, businesses(commission_rate))
+                    )
+                `)
                 .eq('transaction_code', transactionCode)
                 .eq('status', 'PENDING')
                 .single();
@@ -250,6 +261,22 @@ exports.cassoWebhook = async (req, res) => {
                 console.log('[Casso Webhook] Amount mismatch. Expected:', payment.amount, 'Received:', amount);
                 continue;
             }
+
+            // Lấy business_id và commission_rate
+            const booking = payment.bookings;
+            const businessInfo = booking.hotel_id
+                ? booking.hotels?.businesses
+                : booking.tours?.businesses;
+
+            const businessId = booking.hotel_id
+                ? booking.hotels?.businesses_id
+                : booking.tours?.businesses_id;
+
+            const commissionRate = businessInfo?.commission_rate || parseFloat(process.env.DEFAULT_COMMISSION_RATE) || 0.15;
+
+            // Tính toán chia tiền
+            const platformCommission = payment.amount * commissionRate;
+            const businessAmount = payment.amount - platformCommission;
 
             // Update payment status
             await supabase
@@ -267,7 +294,22 @@ exports.cassoWebhook = async (req, res) => {
                 .update({ status: 'PAID' })
                 .eq('id', payment.booking_id);
 
-            console.log('[Casso Webhook] Payment confirmed for:', transactionCode);
+            // Tạo payment_split
+            await supabase
+                .from('payment_splits')
+                .insert([{
+                    payment_id: payment.id,
+                    booking_id: payment.booking_id,
+                    business_id: businessId,
+                    total_amount: payment.amount,
+                    platform_commission_rate: commissionRate,
+                    platform_commission: platformCommission,
+                    business_amount: businessAmount,
+                    status: 'PLATFORM_RECEIVED',
+                    platform_received_at: new Date().toISOString()
+                }]);
+
+            console.log(`[Casso Webhook] Payment confirmed: ${transactionCode}, Platform ${platformCommission}, Business ${businessAmount}`);
         }
 
         // Luôn trả về 200 OK cho webhook
