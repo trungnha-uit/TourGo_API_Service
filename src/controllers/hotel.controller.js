@@ -149,10 +149,31 @@ exports.createHotel = async (req, res) => {
             });
         }
 
+        const totalRooms = parseInt(req.body.total_rooms, 10);
+        const price = parseFloat(req.body.price);
+
+        if (isNaN(totalRooms) || totalRooms < 1 || totalRooms > 100) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Số lượng phòng khách sạn phải nằm trong khoảng từ 1 đến 100.'
+            });
+        }
+
+        if (isNaN(price) || price <= 0) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Giá mỗi đêm phải lớn hơn 0.'
+            });
+        }
+
         const hotelData = {
             name: req.body.name,
             description: req.body.description,
-            price_per_night: req.body.price,
+            price_per_night: price,
             address: req.body.city ? (req.body.address + ", " + req.body.city) : req.body.address,
             amenities: Array.isArray(req.body.amenities) ? req.body.amenities.join(', ') : req.body.amenities,
             businesses_id: business.id,
@@ -160,7 +181,7 @@ exports.createHotel = async (req, res) => {
             open_until: req.body.open_until || null,
             blocked_dates: req.body.blocked_dates || null,
             status: 'PENDING',
-            total_rooms: parseInt(req.body.total_rooms, 10) || 1
+            total_rooms: totalRooms
         };
 
         const { data, error } = await supabase

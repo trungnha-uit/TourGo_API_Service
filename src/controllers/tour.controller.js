@@ -158,8 +158,31 @@ exports.createTour = async (req, res) => {
             });
         }
 
+        const maxParticipants = parseInt(req.body.max_participants, 10);
+        const price = parseFloat(req.body.price);
+
+        if (isNaN(maxParticipants) || maxParticipants < 1 || maxParticipants > 500) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Số lượng người tham gia tối đa phải nằm trong khoảng từ 1 đến 500.'
+            });
+        }
+
+        if (isNaN(price) || price <= 0) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Giá tour phải lớn hơn 0.'
+            });
+        }
+
         const tourData = {
             ...req.body,
+            price: price,
+            max_participants: maxParticipants,
             status: 'PENDING',
             businesses_id: business.id
         };
