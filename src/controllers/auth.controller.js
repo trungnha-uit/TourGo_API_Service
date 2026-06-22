@@ -15,10 +15,9 @@ exports.register = async (req, res) => {
                         name
                     },
 
-                    // Mở app sau khi bấm xác thực email
-                    emailRedirectTo: 'tourgo://auth/confirm'
-                }
-            });
+            emailRedirectTo: 'tourgo://auth/confirm'
+        }
+    });
 
         if (authError) {
             let errorCode = ERROR_CODES.SERVER_ERROR;
@@ -213,10 +212,14 @@ exports.resendVerification = async (req, res) => {
             });
         }
 
-        const { error } = await supabaseAuth.auth.resend({
-            type: 'signup',
-            email: email
-        });
+       const { error } = await supabaseAuth.auth.resend({
+        type: 'signup',
+        email,
+
+        options: {
+        emailRedirectTo: 'tourgo://auth/confirm'
+    }
+});
 
         if (error) {
             return res.status(400).json({
