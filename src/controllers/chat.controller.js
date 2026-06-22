@@ -97,10 +97,10 @@ exports.getRooms = async (req, res) => {
             }
 
             // Get rooms with traveler (user) info
-            // In users table: full_name, email, avatar_url
+            // In users table: name, email, avatar
             const { data: rooms, error: roomsError } = await supabase
                 .from('chat_rooms')
-                .select('*, user:users(id, full_name, email, avatar_url)')
+                .select('*, user:users(id, name, email, avatar)')
                 .eq('business_id', biz.id)
                 .order('created_at', { ascending: false });
 
@@ -119,8 +119,8 @@ exports.getRooms = async (req, res) => {
                 user_id: r.user_id,
                 business_id: r.business_id,
                 created_at: r.created_at,
-                partner_name: r.user ? r.user.full_name : 'Khách hàng',
-                partner_avatar: r.user ? r.user.avatar_url : null
+                partner_name: r.user ? r.user.name : 'Khách hàng',
+                partner_avatar: r.user ? r.user.avatar : null
             }));
 
             return res.status(200).json({
