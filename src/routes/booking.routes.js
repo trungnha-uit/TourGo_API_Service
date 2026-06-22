@@ -7,6 +7,7 @@ router.get('/', auth, bookingController.getMyBookings);
 router.get('/check', auth, bookingController.checkBooking);
 router.get('/business', auth, bookingController.getBusinessBookings);
 router.get('/:id', auth, bookingController.getBookingById);
+router.patch('/business/:id/status', auth, bookingController.updateBusinessBookingStatus);
 router.patch('/:id/cancel', auth, bookingController.cancelBooking);
 router.patch('/:id/status', auth, bookingController.updateBookingStatus);
 

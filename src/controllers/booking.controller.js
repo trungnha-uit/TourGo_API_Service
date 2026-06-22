@@ -2,7 +2,7 @@ const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
 const notifications = require('../services/notification.service');
 
-const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
+const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'CHECKED-IN', 'CHECKED-OUT'];
 
 exports.createBooking = async (req, res) => {
     try {
@@ -11,6 +11,144 @@ exports.createBooking = async (req, res) => {
             user_id: req.user.id,
             status: 'PENDING',
         };
+
+        // --- OVERBOOKING PREVENTION CHECKS ---
+        if (bookingData.tour_id) {
+            const requestedGuests = parseInt(bookingData.guests, 10) || 1;
+            const bookingDate = bookingData.booking_date || bookingData.check_in;
+            if (!bookingDate) {
+                return res.status(400).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.VALIDATION_ERROR,
+                    message: 'Missing booking date'
+                });
+            }
+
+            // Get tour max participants
+            const { data: tour, error: tourError } = await supabase
+                .from('tours')
+                .select('max_participants')
+                .eq('id', bookingData.tour_id)
+                .single();
+
+            if (tourError || !tour) {
+                return res.status(404).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.NOT_FOUND,
+                    message: 'Tour not found'
+                });
+            }
+
+            const maxParticipants = parseInt(tour.max_participants, 10) || 20;
+
+            // Fetch existing active bookings for this tour on the same day
+            const { data: existingBookings, error: fetchError } = await supabase
+                .from('bookings')
+                .select('guests')
+                .eq('tour_id', bookingData.tour_id)
+                .or(`booking_date.eq.${bookingDate},check_in.eq.${bookingDate}`)
+                .neq('status', 'CANCELLED');
+
+            if (fetchError) {
+                throw fetchError;
+            }
+
+            const currentBookedSlots = (existingBookings || []).reduce((sum, b) => sum + (parseInt(b.guests, 10) || 1), 0);
+            if (currentBookedSlots + requestedGuests > maxParticipants) {
+                return res.status(400).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.TOUR_OVERBOOKED,
+                    message: `Tour is full for this date. Maximum slots: ${maxParticipants}, Booked: ${currentBookedSlots}, Requested: ${requestedGuests}`
+                });
+            }
+        } else if (bookingData.hotel_id) {
+            const checkInStr = bookingData.check_in;
+            const checkOutStr = bookingData.check_out;
+            if (!checkInStr || !checkOutStr) {
+                return res.status(400).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.VALIDATION_ERROR,
+                    message: 'Missing check-in or check-out date'
+                });
+            }
+
+            const checkInDate = new Date(checkInStr);
+            const checkOutDate = new Date(checkOutStr);
+            if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate) {
+                return res.status(400).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.VALIDATION_ERROR,
+                    message: 'Invalid check-in or check-out date range'
+                });
+            }
+
+            // Get hotel total rooms
+            const { data: hotel, error: hotelError } = await supabase
+                .from('hotels')
+                .select('total_rooms')
+                .eq('id', bookingData.hotel_id)
+                .single();
+
+            if (hotelError || !hotel) {
+                return res.status(404).json({
+                    success: false,
+                    data: null,
+                    error: ERROR_CODES.NOT_FOUND,
+                    message: 'Hotel not found'
+                });
+            }
+
+            const totalRooms = parseInt(hotel.total_rooms, 10) || 5;
+
+            // Query overlapping active bookings
+            const { data: existingBookings, error: fetchError } = await supabase
+                .from('bookings')
+                .select('check_in, check_out, guests')
+                .eq('hotel_id', bookingData.hotel_id)
+                .neq('status', 'CANCELLED');
+
+            if (fetchError) {
+                throw fetchError;
+            }
+
+            // Count occupied rooms per night day-by-day
+            const counts = {};
+            (existingBookings || []).forEach(b => {
+                const bStart = new Date(b.check_in);
+                let bEnd = new Date(b.check_out);
+                if (isNaN(bStart.getTime())) return;
+                if (isNaN(bEnd.getTime()) || bEnd <= bStart) {
+                    bEnd = new Date(bStart);
+                    bEnd.setDate(bEnd.getDate() + 1);
+                }
+
+                // Tally nights occupied by this existing booking
+                for (let d = new Date(bStart); d < bEnd; d.setDate(d.getDate() + 1)) {
+                    const key = d.toISOString().split('T')[0];
+                    counts[key] = (counts[key] || 0) + (parseInt(b.guests, 10) || 1);
+                }
+            });
+
+            // Check if any night in the requested range exceeds capacity
+            for (let d = new Date(checkInDate); d < checkOutDate; d.setDate(d.getDate() + 1)) {
+                const key = d.toISOString().split('T')[0];
+                const occupied = counts[key] || 0;
+                if (occupied + 1 > totalRooms) {
+                    return res.status(400).json({
+                        success: false,
+                        data: null,
+                        error: ERROR_CODES.HOTEL_OVERBOOKED,
+                        message: `Hotel is fully booked on ${key}. Maximum rooms: ${totalRooms}, Occupied: ${occupied}`
+                    });
+                }
+            }
+        }
+        // -------------------------------------
 
         const { data, error } = await supabase
             .from('bookings')
@@ -168,12 +306,12 @@ exports.updateBookingStatus = async (req, res) => {
         const { id } = req.params;
         const newStatus = String(req.body.status || '').toUpperCase();
 
-        if (!BOOKING_STATUSES.includes(newStatus)) {
+        if (newStatus !== 'CANCELLED') {
             return res.status(400).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.VALIDATION_ERROR,
-                message: `Invalid booking status. Allowed: ${BOOKING_STATUSES.join(', ')}`
+                message: 'Traveler is only allowed to cancel their booking'
             });
         }
 
@@ -206,6 +344,100 @@ exports.updateBookingStatus = async (req, res) => {
 
     } catch (error) {
         console.error('Update booking status error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
+
+exports.updateBusinessBookingStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const newStatus = String(req.body.status || '').toUpperCase().replace('_', '-'); // Support CHECKED_IN -> CHECKED-IN
+
+        if (!BOOKING_STATUSES.includes(newStatus)) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: `Invalid booking status. Allowed: ${BOOKING_STATUSES.join(', ')}`
+            });
+        }
+
+        // 1. Verify user has a business profile
+        const { data: business, error: bizError } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', req.user.id)
+            .single();
+
+        if (bizError || !business) {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.FORBIDDEN,
+                message: 'User is not associated with a business profile'
+            });
+        }
+
+        // 2. Fetch the booking to verify it belongs to this business
+        const { data: booking, error: bookingError } = await supabase
+            .from('bookings')
+            .select('*, hotels(businesses_id), tours(businesses_id)')
+            .eq('id', id)
+            .single();
+
+        if (bookingError || !booking) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'Booking not found'
+            });
+        }
+
+        const bookingBizId = booking.hotels?.businesses_id || booking.tours?.businesses_id;
+        if (bookingBizId !== business.id) {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.FORBIDDEN,
+                message: 'Forbidden: Booking does not belong to your business'
+            });
+        }
+
+        // 3. Update the booking status
+        const { data: updatedBooking, error: updateError } = await supabase
+            .from('bookings')
+            .update({ status: newStatus })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateError || !updatedBooking) {
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: 'Failed to update booking status'
+            });
+        }
+
+        // Notify traveler + business owner of the new status. Best-effort.
+        await notifications.notifyBookingStatus(updatedBooking);
+
+        res.status(200).json({
+            success: true,
+            data: updatedBooking,
+            error: null,
+            message: 'Booking status updated successfully'
+        });
+
+    } catch (error) {
+        console.error('Update business booking status error:', error);
         res.status(500).json({
             success: false,
             data: null,
@@ -387,51 +619,3 @@ exports.getBusinessBookings = async (req, res) => {
     }
 };
 
-exports.updateBookingStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        if (!status) {
-            return res.status(400).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.VALIDATION_ERROR,
-                message: 'Missing status'
-            });
-        }
-
-        const { data, error } = await supabase
-            .from('bookings')
-            .update({ status: status.toUpperCase() })
-            .eq('id', id)
-            .eq('user_id', req.user.id)
-            .select()
-            .single();
-
-        if (error || !data) {
-            return res.status(404).json({
-                success: false,
-                data: null,
-                error: ERROR_CODES.NOT_FOUND,
-                message: 'Booking not found or unauthorized'
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: data,
-            error: null,
-            message: 'Booking status updated successfully'
-        });
-
-    } catch (error) {
-        console.error('Update booking status error:', error);
-        res.status(500).json({
-            success: false,
-            data: null,
-            error: ERROR_CODES.SERVER_ERROR,
-            message: 'Internal server error'
-        });
-    }
-};
