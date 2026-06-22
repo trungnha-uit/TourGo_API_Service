@@ -133,7 +133,7 @@ exports.getRooms = async (req, res) => {
             // Traveler
             const { data: rooms, error: roomsError } = await supabase
                 .from('chat_rooms')
-                .select('*, business:businesses(id, name, logo_url)')
+                .select('*, business:businesses(id, name)')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
 
@@ -152,7 +152,7 @@ exports.getRooms = async (req, res) => {
                 business_id: r.business_id,
                 created_at: r.created_at,
                 partner_name: r.business ? r.business.name : 'Doanh nghiệp',
-                partner_avatar: r.business ? r.business.logo_url : null
+                partner_avatar: null
             }));
 
             return res.status(200).json({
