@@ -9,6 +9,25 @@ function generateTransactionCode() {
     return `TG${timestamp}${random}`;
 }
 
+function mapPaymentType(paymentMethod) {
+    switch (paymentMethod) {
+        case 'bank_transfer':
+            return 'BANK_TRANSFER';
+        case 'cod':
+            return 'CASH';
+        case 'vietqr':
+            return 'VIETQR';
+        case 'momo':
+            return 'MOMO';
+        case 'vnpay':
+            return 'VNPAY';
+        case 'zalopay':
+            return 'ZALOPAY';
+        default:
+            return null;
+    }
+}
+
 // Tạo payment (transaction_code hoặc payment_url)
 exports.createPayment = async (req, res) => {
     try {
@@ -90,6 +109,16 @@ exports.createPayment = async (req, res) => {
         // Dùng số tiền tính toán từ backend
         const finalAmount = calculatedAmount;
 
+        const paymentType = mapPaymentType(paymentMethod);
+        if (!paymentType) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.VALIDATION_ERROR,
+                message: 'Invalid payment method'
+            });
+        }
+
         const transactionCode = generateTransactionCode();
 
         // Verify uniqueness (retry nếu trùng - cực kỳ hiếm)
@@ -107,7 +136,7 @@ exports.createPayment = async (req, res) => {
                     transaction_code: code,
                     booking_id: bookingId,
                     amount: finalAmount, // Dùng số tiền backend tính
-                    type: paymentMethod.toUpperCase(),
+                    type: paymentType,
                     status: 'PENDING',
                     user_id: userId,
                     payment_provider: paymentMethod === 'bank_transfer' ? 'CASSO' : paymentMethod === 'payos' ? 'PAYOS' : null
