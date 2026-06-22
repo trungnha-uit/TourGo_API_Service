@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notificationService = require('../services/notification.service');
 
 exports.getAllHotels = async (req, res) => {
     try {
@@ -231,10 +232,11 @@ exports.approveHotel = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('hotels')
             .update({ status: 'APPROVED' })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id, name, businesses_id');
 
         if (error) {
             return res.status(500).json({
@@ -243,6 +245,11 @@ exports.approveHotel = async (req, res) => {
                 error: ERROR_CODES.SERVER_ERROR,
                 message: error.message
             });
+        }
+
+        if (data && data.length > 0) {
+            // Trigger best-effort notification to business owner
+            notificationService.notifyListingApprovalStatus(data[0], 'hotel', 'APPROVED');
         }
 
         res.status(200).json({
@@ -266,10 +273,11 @@ exports.rejectHotel = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('hotels')
             .update({ status: 'REJECTED' })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id, name, businesses_id');
 
         if (error) {
             return res.status(500).json({
@@ -278,6 +286,11 @@ exports.rejectHotel = async (req, res) => {
                 error: ERROR_CODES.SERVER_ERROR,
                 message: error.message
             });
+        }
+
+        if (data && data.length > 0) {
+            // Trigger best-effort notification to business owner
+            notificationService.notifyListingApprovalStatus(data[0], 'hotel', 'REJECTED');
         }
 
         res.status(200).json({

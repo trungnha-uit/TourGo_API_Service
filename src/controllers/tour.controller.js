@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notificationService = require('../services/notification.service');
 
 exports.getAllTours = async (req, res) => {
     try {
@@ -301,10 +302,11 @@ exports.approveTour = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('tours')
             .update({ status: 'APPROVED' })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id, name, businesses_id');
 
         if (error) {
             return res.status(500).json({
@@ -313,6 +315,11 @@ exports.approveTour = async (req, res) => {
                 error: ERROR_CODES.SERVER_ERROR,
                 message: error.message
             });
+        }
+
+        if (data && data.length > 0) {
+            // Trigger best-effort notification to business owner
+            notificationService.notifyListingApprovalStatus(data[0], 'tour', 'APPROVED');
         }
 
         res.status(200).json({
@@ -336,10 +343,11 @@ exports.rejectTour = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('tours')
             .update({ status: 'REJECTED' })
-            .eq('id', id);
+            .eq('id', id)
+            .select('id, name, businesses_id');
 
         if (error) {
             return res.status(500).json({
@@ -348,6 +356,11 @@ exports.rejectTour = async (req, res) => {
                 error: ERROR_CODES.SERVER_ERROR,
                 message: error.message
             });
+        }
+
+        if (data && data.length > 0) {
+            // Trigger best-effort notification to business owner
+            notificationService.notifyListingApprovalStatus(data[0], 'tour', 'REJECTED');
         }
 
         res.status(200).json({

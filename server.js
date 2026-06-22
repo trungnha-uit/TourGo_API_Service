@@ -31,6 +31,7 @@ app.use('/api/reviews', require('./src/routes/review.routes'));
 app.use('/api/notifications', require('./src/routes/notification.routes'));
 app.use('/api/payments', require('./src/routes/payment.routes'));
 app.use('/api/payouts', require('./src/routes/payout.routes'));
+app.use('/api/chats', require('./src/routes/chat.routes'));
 
 app.use(require('./src/middleware/notFound'));
 app.use(require('./src/middleware/errorHandler'));

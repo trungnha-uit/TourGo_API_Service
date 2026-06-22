@@ -194,10 +194,65 @@ async function notifyAdminsBusinessPending(business) {
     }
 }
 
+async function notifyListingApprovalStatus(listing, type, status, note = '') {
+    try {
+        if (!listing || !listing.id) return;
+        
+        // Find business owner's user_id
+        let ownerUserId = null;
+        if (listing.businesses_id) {
+            const { data: biz } = await supabase
+                .from('businesses')
+                .select('user_id')
+                .eq('id', listing.businesses_id)
+                .single();
+            ownerUserId = biz ? biz.user_id : null;
+        }
+        
+        if (!ownerUserId) return;
+
+        let title = '';
+        let body = '';
+        let icon = '';
+
+        const typeLabel = type === 'tour' ? 'Tour' : 'Khách sạn';
+
+        if (status === 'APPROVED') {
+            title = 'Bài đăng đã được duyệt';
+            body = `${typeLabel} "${listing.name}" của bạn đã được phê duyệt thành công.`;
+            icon = 'check_circle';
+        } else if (status === 'REJECTED') {
+            title = 'Bài đăng bị từ chối';
+            body = `${typeLabel} "${listing.name}" của bạn đã bị từ chối phê duyệt. ${note ? 'Lý do: ' + note : ''}`;
+            icon = 'x_circle';
+        } else if (status === 'REVISION') {
+            title = 'Yêu cầu chỉnh sửa bài đăng';
+            body = `${typeLabel} "${listing.name}" cần chỉnh sửa lại theo yêu cầu. ${note ? 'Ghi chú: ' + note : ''}`;
+            icon = 'edit_3';
+        } else {
+            return;
+        }
+
+        await createNotification({
+            userId: ownerUserId,
+            role: 'BUSINESS',
+            category: 'support',
+            title,
+            body,
+            icon,
+            sourceKey: `listing:${type}:${listing.id}:${status.toLowerCase()}:${Date.now()}`,
+            data: { listing_id: listing.id, type, status },
+        });
+    } catch (e) {
+        console.warn('notifyListingApprovalStatus failed:', e.message);
+    }
+}
+
 module.exports = {
     createNotification,
     resolveListingOwner,
     notifyBookingStatus,
     notifyReviewCreated,
     notifyAdminsBusinessPending,
+    notifyListingApprovalStatus,
 };
