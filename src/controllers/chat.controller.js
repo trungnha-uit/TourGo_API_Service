@@ -259,3 +259,82 @@ exports.sendMessage = async (req, res) => {
         });
     }
 };
+
+exports.sendImageMessage = async (req, res) => {
+    try {
+        const { roomId } = req.params;
+        const senderId = req.user.id;
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.BAD_REQUEST,
+                message: 'Image file is required'
+            });
+        }
+
+        const file = req.file;
+        const fileExt = file.mimetype.split('/')[1] || 'jpg';
+        const fileName = `chats/${roomId}/${Date.now()}.${fileExt}`;
+
+        // Upload to the existing 'review-images' bucket
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('review-images')
+            .upload(fileName, file.buffer, {
+                contentType: file.mimetype,
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Supabase chat upload error:', uploadError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: uploadError.message
+            });
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('review-images')
+            .getPublicUrl(fileName);
+
+        // Create message entry in DB
+        const { data: message, error: dbError } = await supabase
+            .from('chat_messages')
+            .insert([{
+                room_id: roomId,
+                sender_id: senderId,
+                message_text: '[Hình ảnh]',
+                image_url: publicUrl
+            }])
+            .select()
+            .single();
+
+        if (dbError) {
+            console.error('Save chat image message error:', dbError);
+            return res.status(500).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.SERVER_ERROR,
+                message: dbError.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            data: message,
+            error: null,
+            message: 'Image message sent successfully'
+        });
+    } catch (error) {
+        console.error('sendImageMessage error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: error.message
+        });
+    }
+};

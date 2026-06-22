@@ -25,3 +25,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at
 -- Vô hiệu hóa RLS trên các bảng chat mới để thuận tiện cho việc demo/test không bị chặn
 ALTER TABLE chat_rooms DISABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
+
+-- Bổ sung cột lưu link ảnh gửi trong chat
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS image_url TEXT;
