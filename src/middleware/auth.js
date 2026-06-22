@@ -1,4 +1,5 @@
-const supabase = require('../config/supabaseAuth');
+const supabaseAuth = require('../config/supabaseAuth');
+const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
 
 const auth = async (req, res, next) => {
@@ -15,7 +16,7 @@ const auth = async (req, res, next) => {
         }
 
         const token = authHeader.substring(7);
-        const { data: { user }, error } = await supabase.auth.getUser(token);
+        const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
 
         if (error || !user) {
             return res.status(401).json({
@@ -26,12 +27,21 @@ const auth = async (req, res, next) => {
             });
         }
 
-        if (user.status === 'suspended') {
+        // The moderation status is stored in the public.users profile table, not
+        // in the Supabase auth user — look it up there so a suspended account is
+        // blocked on every authenticated request (even with a still-valid token).
+        const { data: profile } = await supabase
+            .from('users')
+            .select('status')
+            .eq('id', user.id)
+            .single();
+
+        if (profile && profile.status === 'suspended') {
             return res.status(403).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.ACCOUNT_SUSPENDED,
-                message: 'Account is suspended'
+                message: 'Tài khoản của bạn đã bị tạm khoá. Vui lòng liên hệ quản trị viên.'
             });
         }
 

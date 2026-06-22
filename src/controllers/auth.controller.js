@@ -109,9 +109,20 @@ exports.login = async (req, res) => {
         // Fetch user profile from public.users table
         const { data: userProfile } = await supabase
             .from('users')
-            .select('name, role')
+            .select('name, role, status')
             .eq('id', authData.user.id)
             .single();
+
+        // Block suspended accounts — the moderation status lives in public.users,
+        // not in the Supabase auth user, so it must be checked here.
+        if (userProfile && userProfile.status === 'suspended') {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.ACCOUNT_SUSPENDED,
+                message: 'Tài khoản của bạn đã bị tạm khoá. Vui lòng liên hệ quản trị viên.'
+            });
+        }
 
         res.status(200).json({
             success: true,
@@ -201,6 +212,23 @@ exports.socialLogin = async (req, res) => {
                 data: null,
                 error: ERROR_CODES.SOCIAL_LOGIN_FAILED,
                 message: error ? error.message : 'Social login failed'
+            });
+        }
+
+        // Block suspended accounts — same check as the email/password path, since
+        // social login bypasses it entirely otherwise.
+        const { data: socialProfile } = await supabase
+            .from('users')
+            .select('status')
+            .eq('id', data.user.id)
+            .single();
+
+        if (socialProfile && socialProfile.status === 'suspended') {
+            return res.status(403).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.ACCOUNT_SUSPENDED,
+                message: 'Tài khoản của bạn đã bị tạm khoá. Vui lòng liên hệ quản trị viên.'
             });
         }
 
