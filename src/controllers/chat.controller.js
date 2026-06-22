@@ -261,8 +261,8 @@ exports.sendMessage = async (req, res) => {
         }
         const { data: room } = await supabase.from('chat_rooms').select('user_id, business_id').eq('id', roomId).single();
         if (room) {
-            const recipientId = (senderId === room.user_id) ? room.business_id : room.user_id;
-            const recipientRole = (senderId === room.user_id) ? 'BUSINESS' : 'TRAVELER';
+            const recipientId = (senderId === room.user_id) ? room.user_id : room.business_id;
+            const recipientRole = (senderId === room.user_id) ? 'TRAVELER' : 'BUSINESS';
             await supabase.from('notifications').insert([{
                 user_id: recipientId, role: recipientRole, category: 'chat',
                 title: 'Tin nhắn mới', body: messageText.trim(),
@@ -349,8 +349,8 @@ exports.sendImageMessage = async (req, res) => {
         }
         const { data: room } = await supabase.from('chat_rooms').select('user_id, business_id').eq('id', roomId).single();
         if (room) {
-            const recipientId = (senderId === room.user_id) ? room.business_id : room.user_id;
-            const recipientRole = (senderId === room.user_id) ? 'BUSINESS' : 'TRAVELER';
+            const recipientId = (senderId === room.user_id) ? room.user_id : room.business_id;
+            const recipientRole = (senderId === room.user_id) ? 'TRAVELER' : 'BUSINESS';
             await supabase.from('notifications').insert([{
                 user_id: recipientId, role: recipientRole, category: 'chat',
                 title: 'Tin nhắn mới', body: '[Hình ảnh]',
