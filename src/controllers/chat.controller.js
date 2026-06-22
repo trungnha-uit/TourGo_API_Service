@@ -1,5 +1,6 @@
 const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
+const notifications = require('../services/notification.service');
 
 exports.getOrCreateRoom = async (req, res) => {
     try {
@@ -259,29 +260,9 @@ exports.sendMessage = async (req, res) => {
                 message: error.message
             });
         }
-        const { data: room } = await supabase
-    .from('chat_rooms')
-    .select('user_id, business_id')
-    .eq('id', roomId)
-    .single();
+        // Notify the recipient (business owner / traveler). Best-effort.
+        await notifications.notifyChatMessage(message);
 
-    if (room) {
-        // NẾU sender là user_id, THÌ người nhận phải là business_id (và ngược lại)
-        const isSenderTraveler = (senderId === room.user_id);
-        
-        const recipientId = isSenderTraveler ? room.business_id : room.user_id;
-        const recipientRole = isSenderTraveler ? 'BUSINESS' : 'TRAVELER'; // Gửi cho Business thì role phải là BUSINESS
-
-        await supabase.from('notifications').insert([{
-            user_id: recipientId, 
-            role: recipientRole, 
-            category: 'chat',
-            title: 'Tin nhắn mới', 
-            body: messageText.trim(), // hoặc '[Hình ảnh]' cho hàm kia
-            data: { room_id: roomId }, 
-            read: false
-        }]);
-    }
         res.status(201).json({
             success: true,
             data: message,
@@ -360,29 +341,9 @@ exports.sendImageMessage = async (req, res) => {
                 message: dbError.message
             });
         }
-        const { data: room } = await supabase
-        .from('chat_rooms')
-        .select('user_id, business_id')
-        .eq('id', roomId)
-        .single();
+        // Notify the recipient (business owner / traveler). Best-effort.
+        await notifications.notifyChatMessage(message);
 
-    if (room) {
-        // NẾU sender là user_id, THÌ người nhận phải là business_id (và ngược lại)
-        const isSenderTraveler = (senderId === room.user_id);
-        
-        const recipientId = isSenderTraveler ? room.business_id : room.user_id;
-        const recipientRole = isSenderTraveler ? 'BUSINESS' : 'TRAVELER'; // Gửi cho Business thì role phải là BUSINESS
-
-        await supabase.from('notifications').insert([{
-            user_id: recipientId, 
-            role: recipientRole, 
-            category: 'chat',
-            title: 'Tin nhắn mới đính kèm hình ảnh', 
-            body: messageText.trim(), // hoặc '[Hình ảnh]' cho hàm kia
-            data: { room_id: roomId }, 
-            read: false
-        }]);
-    }
         res.status(201).json({
             success: true,
             data: message,

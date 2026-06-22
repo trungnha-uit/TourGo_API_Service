@@ -134,6 +134,79 @@ async function notifyBookingStatus(booking) {
     }
 }
 
+/**
+ * Notify the recipient of a new chat message. A room links a traveler
+ * (chat_rooms.user_id) to a business (chat_rooms.business_id): if the traveler
+ * sent it, the business owner is notified (role BUSINESS, "support" category);
+ * if the business replied, the traveler is notified (role TRAVELER). Keyed by
+ * message id so each message produces exactly one row per recipient.
+ */
+async function notifyChatMessage(message) {
+    try {
+        if (!message || !message.id || !message.room_id) return;
+
+        const { data: room } = await supabase
+            .from('chat_rooms')
+            .select('id, user_id, business_id')
+            .eq('id', message.room_id)
+            .single();
+        if (!room) return;
+
+        const raw = message.image_url ? '[Hình ảnh]' : (message.message_text || '').trim();
+        const preview = raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
+        const senderIsTraveler = message.sender_id === room.user_id;
+
+        // Resolve the owning business (owner user_id + display name).
+        let ownerUserId = null;
+        let businessName = null;
+        if (room.business_id) {
+            const { data: biz } = await supabase
+                .from('businesses')
+                .select('user_id, name')
+                .eq('id', room.business_id)
+                .single();
+            ownerUserId = biz ? biz.user_id : null;
+            businessName = biz ? biz.name : null;
+        }
+
+        if (senderIsTraveler) {
+            // Traveler -> business owner.
+            if (!ownerUserId) return;
+            let travelerName = null;
+            if (room.user_id) {
+                const { data: u } = await supabase
+                    .from('users').select('name').eq('id', room.user_id).single();
+                travelerName = u ? u.name : null;
+            }
+            await createNotification({
+                userId: ownerUserId,
+                role: 'BUSINESS',
+                category: 'support',
+                title: 'Tin nhắn mới',
+                body: travelerName ? `${travelerName}: ${preview}` : preview,
+                icon: 'reply',
+                sourceKey: `chat:msg:${message.id}:business`,
+                data: { room_id: room.id, message_id: message.id, type: 'chat' },
+            });
+        } else {
+            // Business -> traveler.
+            if (!room.user_id) return;
+            await createNotification({
+                userId: room.user_id,
+                role: 'TRAVELER',
+                category: 'bookings',
+                title: 'Tin nhắn mới',
+                body: businessName ? `${businessName}: ${preview}` : preview,
+                icon: 'reply',
+                sourceKey: `chat:msg:${message.id}:traveler`,
+                data: { room_id: room.id, message_id: message.id, type: 'chat' },
+            });
+        }
+    } catch (e) {
+        console.warn('notifyChatMessage failed:', e.message);
+    }
+}
+
 /** Notify the business owner that a new review landed on their listing. */
 async function notifyReviewCreated(review, type) {
     try {
@@ -252,6 +325,7 @@ module.exports = {
     createNotification,
     resolveListingOwner,
     notifyBookingStatus,
+    notifyChatMessage,
     notifyReviewCreated,
     notifyAdminsBusinessPending,
     notifyListingApprovalStatus,
