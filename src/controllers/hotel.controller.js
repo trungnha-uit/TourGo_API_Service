@@ -159,7 +159,8 @@ exports.createHotel = async (req, res) => {
             open_from: req.body.open_from || null,
             open_until: req.body.open_until || null,
             blocked_dates: req.body.blocked_dates || null,
-            status: 'PENDING'
+            status: 'PENDING',
+            total_rooms: parseInt(req.body.total_rooms, 10) || 1
         };
 
         const { data, error } = await supabase

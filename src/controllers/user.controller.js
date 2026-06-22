@@ -585,6 +585,30 @@ exports.getMyListings = async (req, res) => {
         }
 
         // 3. Map both to a common Listing format
+        const tourIds = tours ? tours.map(t => t.id) : [];
+        const hotelIds = hotels ? hotels.map(h => h.id) : [];
+
+        let bookingCounts = {};
+        if (tourIds.length > 0 || hotelIds.length > 0) {
+            const orFilter = [];
+            if (tourIds.length > 0) orFilter.push(`tour_id.in.(${tourIds.join(',')})`);
+            if (hotelIds.length > 0) orFilter.push(`hotel_id.in.(${hotelIds.join(',')})`);
+
+            const { data: bookingsData, error: bookingsError } = await supabase
+                .from('bookings')
+                .select('tour_id, hotel_id')
+                .or(orFilter.join(','));
+
+            if (!bookingsError && bookingsData) {
+                bookingsData.forEach(b => {
+                    const id = b.tour_id || b.hotel_id;
+                    if (id) {
+                        bookingCounts[id] = (bookingCounts[id] || 0) + 1;
+                    }
+                });
+            }
+        }
+
         const listings = [];
         if (tours) {
             tours.forEach(t => {
@@ -595,7 +619,9 @@ exports.getMyListings = async (req, res) => {
                     price: t.price || 0,
                     status: t.status === 'APPROVED' ? 'active' : (t.status || 'pending').toLowerCase(),
                     category: 'tour',
-                    created_at: t.created_at
+                    created_at: t.created_at,
+                    bookings: bookingCounts[t.id] || 0,
+                    rating: t.rating || 0.0
                 });
             });
         }
@@ -608,7 +634,9 @@ exports.getMyListings = async (req, res) => {
                     price: h.price_per_night || 0,
                     status: h.status === 'APPROVED' ? 'active' : (h.status || 'pending').toLowerCase(),
                     category: 'hotel',
-                    created_at: h.created_at
+                    created_at: h.created_at,
+                    bookings: bookingCounts[h.id] || 0,
+                    rating: h.rating || 0.0
                 });
             });
         }
