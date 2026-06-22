@@ -174,6 +174,7 @@ exports.createPayment = async (req, res) => {
                 data: {
                     payment_method: 'bank_transfer',
                     transaction_code: payment.transaction_code,
+                    amount: finalAmount,
                     bank_info: {
                         bank_name: process.env.BANK_NAME || 'BIDV',
                         account_number: process.env.BANK_ACCOUNT_NUMBER || 'V3CASS0931215748',
@@ -195,6 +196,7 @@ exports.createPayment = async (req, res) => {
                 data: {
                     payment_method: 'payos',
                     transaction_code: payment.transaction_code,
+                    amount: finalAmount,
                     payment_url: paymentUrl
                 },
                 error: null,
@@ -206,7 +208,8 @@ exports.createPayment = async (req, res) => {
                 success: true,
                 data: {
                     payment_method: 'cod',
-                    transaction_code: payment.transaction_code
+                    transaction_code: payment.transaction_code,
+                    amount: finalAmount
                 },
                 error: null,
                 message: 'COD payment registered'
