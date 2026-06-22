@@ -64,14 +64,15 @@ exports.register = async (req, res) => {
                     id: authData.user.id,
                     email: authData.user.email,
                     name: name,
-                    role: 'user'
+                    role: 'user',
+                    emailVerified: !!authData.user.email_confirmed_at
                 },
-                session: {
+                session: authData.session ? {
                     access_token: authData.session.access_token,
                     refresh_token: authData.session.refresh_token,
                     expires_at: authData.session.expires_at,
                     token_type: authData.session.token_type
-                }
+                } : null
             },
             error: null,
             message: 'Registration successful'
@@ -98,6 +99,14 @@ exports.login = async (req, res) => {
         });
 
         if (authError) {
+            if (authError.message.includes('not confirmed') || authError.message.toLowerCase().includes('email not confirmed')) {
+                return res.status(403).json({
+                    success: false,
+                    data: null,
+                    error: 'AUTH_EMAIL_NOT_CONFIRMED',
+                    message: 'Vui lòng xác thực email trước khi đăng nhập.'
+                });
+            }
             return res.status(401).json({
                 success: false,
                 data: null,
@@ -154,6 +163,49 @@ exports.login = async (req, res) => {
         });
     }
 }
+
+exports.resendVerification = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'VALIDATION_ERROR',
+                message: 'Email is required'
+            });
+        }
+
+        const { error } = await supabaseAuth.auth.resend({
+            type: 'signup',
+            email: email
+        });
+
+        if (error) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'RESEND_FAILED',
+                message: error.message
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Verification email resent successfully'
+        });
+    } catch (error) {
+        console.error('Resend verification error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
 
 /**
  * Social login (Google / Facebook).
