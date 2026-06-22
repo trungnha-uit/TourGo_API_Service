@@ -77,7 +77,24 @@ exports.getOrCreateRoom = async (req, res) => {
 exports.getRooms = async (req, res) => {
     try {
         const userId = req.user.id;
-        const role = req.user.role; // 'admin' | 'business' | 'traveler'
+
+        // Fetch user profile to get the role
+        const { data: userProfile, error: profileError } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', userId)
+            .single();
+
+        if (profileError || !userProfile) {
+            return res.status(404).json({
+                success: false,
+                data: null,
+                error: ERROR_CODES.NOT_FOUND,
+                message: 'User profile not found'
+            });
+        }
+
+        const role = userProfile.role; // 'admin' | 'business' | 'traveler'
 
         if (role === 'business') {
             // Find business id
