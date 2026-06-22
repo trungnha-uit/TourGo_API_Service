@@ -259,7 +259,16 @@ exports.sendMessage = async (req, res) => {
                 message: error.message
             });
         }
-
+        const { data: room } = await supabase.from('chat_rooms').select('user_id, business_id').eq('id', roomId).single();
+        if (room) {
+            const recipientId = (senderId === room.user_id) ? room.user_id : room.business_id;
+            const recipientRole = (senderId === room.user_id) ? 'TRAVELER' : 'BUSINESS';
+            await supabase.from('notifications').insert([{
+                user_id: recipientId, role: recipientRole, category: 'CHAT',
+                title: 'Tin nhắn mới', body: messageText.trim(),
+                data: { room_id: roomId }, read: false
+            }]);
+        }
         res.status(201).json({
             success: true,
             data: message,
@@ -338,7 +347,16 @@ exports.sendImageMessage = async (req, res) => {
                 message: dbError.message
             });
         }
-
+        const { data: room } = await supabase.from('chat_rooms').select('user_id, business_id').eq('id', roomId).single();
+        if (room) {
+            const recipientId = (senderId === room.user_id) ? room.user_id : room.business_id;
+            const recipientRole = (senderId === room.user_id) ? 'TRAVELER' : 'BUSINESS';
+            await supabase.from('notifications').insert([{
+                user_id: recipientId, role: recipientRole, category: 'CHAT',
+                title: 'Tin nhắn mới', body: '[Hình ảnh]',
+                data: { room_id: roomId }, read: false
+            }]);
+        }
         res.status(201).json({
             success: true,
             data: message,
