@@ -11,8 +11,11 @@ exports.register = async (req, res) => {
             password,
             options: {
                 data: {
-                    name: name  
-                }
+                    name: name
+                },
+                // Thêm redirectTo URL để chuyển hướng sau khi xác nhận email
+                redirectTo: 'tourgo://auth/confirm' // Thay thế bằng deep link thực tế của bạn
+           
             }
         });
 
