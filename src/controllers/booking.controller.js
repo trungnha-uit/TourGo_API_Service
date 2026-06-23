@@ -4,6 +4,10 @@ const notifications = require('../services/notification.service');
 
 const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'CHECKED-IN', 'CHECKED-OUT'];
 
+// Statuses that mean the traveller has booked *and* paid (so they may review).
+// 'PAID' is written by the payment flow; the rest are post-payment business states.
+const PAID_BOOKING_STATUSES = ['PAID', 'CONFIRMED', 'COMPLETED', 'CHECKED-IN', 'CHECKED-OUT'];
+
 exports.createBooking = async (req, res) => {
     try {
         const bookingData = {
@@ -447,6 +451,14 @@ exports.updateBusinessBookingStatus = async (req, res) => {
     }
 };
 
+// A booking counts as "paid" (and so review-eligible) once it has left the
+// PENDING/CANCELLED states — i.e. the traveller has booked and paid, regardless
+// of whether the stay/trip has happened yet.
+function isPaidBooking(b) {
+    if (!b) return false;
+    return PAID_BOOKING_STATUSES.includes(String(b.status || '').toUpperCase());
+}
+
 // A booking counts as a *completed* trip when it was explicitly marked
 // COMPLETED, or it was paid/confirmed (i.e. not pending/cancelled) and its
 // check-out date has already passed. Pending (unpaid) and cancelled bookings
@@ -507,14 +519,16 @@ exports.checkBooking = async (req, res) => {
             });
         }
 
+        const hasPaidBooking = (data || []).some(isPaidBooking);
         const isCompleted = (data || []).some(isTripCompleted);
 
         res.status(200).json({
             success: true,
             data: {
-                // hasBooked stays the gate for reviews (kept for backward compat);
-                // it is true only once the trip is actually completed.
-                hasBooked: isCompleted,
+                // hasBooked is the review gate: true once the traveller has booked
+                // *and* paid (no need to wait until check-out).
+                hasBooked: hasPaidBooking,
+                // isCompleted is the stricter "trip has ended" flag (badge/back-compat).
                 isCompleted: isCompleted,
                 bookingCount: data ? data.length : 0
             },

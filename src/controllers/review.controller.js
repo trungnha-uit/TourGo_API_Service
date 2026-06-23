@@ -2,12 +2,18 @@ const supabase = require('../config/supabase');
 const ERROR_CODES = require('../constants/errorCodes');
 const notifications = require('../services/notification.service');
 
+// Statuses that mean the traveller has booked *and* paid (so they may review).
+// 'PAID' is written by the payment flow; the rest are post-payment business states.
+const PAID_BOOKING_STATUSES = ['PAID', 'CONFIRMED', 'COMPLETED', 'CHECKED-IN', 'CHECKED-OUT'];
+
+// A user may review once they have a booked-and-paid booking for the item — they
+// no longer have to wait until the stay/trip is marked COMPLETED.
 async function checkBookingCompleted(userId, hotelId, tourId) {
     const query = supabase
         .from('bookings')
         .select('id, status')
         .eq('user_id', userId)
-        .eq('status', 'COMPLETED')
+        .in('status', PAID_BOOKING_STATUSES)
         .limit(1);
 
     if (hotelId) {
@@ -102,7 +108,7 @@ exports.createReview = async (req, res) => {
                 success: false,
                 data: null,
                 error: ERROR_CODES.BOOKING_ERROR,
-                message: `You must complete a booking before reviewing this ${hotel_id ? 'hotel' : 'tour'}`
+                message: `You must book and pay for this ${hotel_id ? 'hotel' : 'tour'} before reviewing it`
             });
         }
 
@@ -251,7 +257,7 @@ exports.updateReview = async (req, res) => {
                 success: false,
                 data: null,
                 error: ERROR_CODES.BOOKING_ERROR,
-                message: 'You must have a completed booking to update this review'
+                message: 'You must have a booked-and-paid booking to update this review'
             });
         }
 
