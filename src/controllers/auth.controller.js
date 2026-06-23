@@ -20,30 +20,30 @@ exports.register = async (req, res) => {
     });
 
         if (authError) {
+            const message = authError.message.toLowerCase();
             let errorCode = ERROR_CODES.SERVER_ERROR;
+            let statusCode = 400;
+            let userMessage = authError.message;
 
-            if (
-                authError.message
-                    .toLowerCase()
-                    .includes('already registered')
-            ) {
-                errorCode =
-                    ERROR_CODES.AUTH_EMAIL_ALREADY_EXISTS;
-
-            } else if (
-                authError.message
-                    .toLowerCase()
-                    .includes('password')
-            ) {
-                errorCode =
-                    ERROR_CODES.AUTH_WEAK_PASSWORD;
+            if (message.includes('already registered')) {
+                errorCode = ERROR_CODES.AUTH_EMAIL_ALREADY_EXISTS;
+            } else if (message.includes('rate limit')) {
+                // Supabase's built-in email service caps confirmation emails per
+                // hour. Once exhausted, signUp fails with "email rate limit
+                // exceeded" — surface it as a clear 429 instead of a generic
+                // "server error" so the user knows to retry later.
+                errorCode = ERROR_CODES.RATE_LIMIT;
+                statusCode = 429;
+                userMessage = 'Hệ thống đang gửi quá nhiều email xác thực. Vui lòng thử lại sau vài phút.';
+            } else if (message.includes('password')) {
+                errorCode = ERROR_CODES.AUTH_WEAK_PASSWORD;
             }
 
-            return res.status(400).json({
+            return res.status(statusCode).json({
                 success: false,
                 data: null,
                 error: errorCode,
-                message: authError.message
+                message: userMessage
             });
         }
 
