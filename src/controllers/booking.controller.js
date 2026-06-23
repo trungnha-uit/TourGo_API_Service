@@ -190,7 +190,10 @@ exports.getMyBookings = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('bookings')
-            .select('*')
+            .select(`
+                *,
+                payments(transaction_code)
+            `)
             .eq('user_id', req.user.id)
             .order('booking_date', { ascending: false });
 
