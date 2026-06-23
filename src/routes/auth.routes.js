@@ -8,5 +8,6 @@ router.post('/reset-password', authController.resetPassword);
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authController.logout);
 router.post('/update-password', authController.updatePassword);
+router.post('/resend-verification', authController.resendVerification);
 
 module.exports = router;

@@ -4,10 +4,36 @@ const notifications = require('../services/notification.service');
 
 exports.getOrCreateRoom = async (req, res) => {
     try {
-        const { businessId } = req.body;
-        const userId = req.user.id; // Traveler's user ID
+        const { businessId, userId: targetUserId } = req.body;
+        let finalUserId = req.user.id;
+        let finalBusinessId = businessId;
 
-        if (!businessId) {
+        // Fetch current user's profile to check if they are a business
+        const { data: userProfile } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', req.user.id)
+            .single();
+
+        const isBusiness = userProfile && userProfile.role === 'business';
+
+        if (isBusiness) {
+            // Find business id associated with this business owner
+            const { data: biz } = await supabase
+                .from('businesses')
+                .select('id')
+                .eq('user_id', req.user.id)
+                .single();
+
+            if (biz) {
+                finalBusinessId = biz.id;
+            }
+            if (targetUserId) {
+                finalUserId = targetUserId;
+            }
+        }
+
+        if (!finalBusinessId) {
             return res.status(400).json({
                 success: false,
                 data: null,
@@ -19,9 +45,9 @@ exports.getOrCreateRoom = async (req, res) => {
         // 1. Check if room exists
         const { data: existingRoom, error: fetchError } = await supabase
             .from('chat_rooms')
-            .select('*, business:businesses(id, name)')
-            .eq('user_id', userId)
-            .eq('business_id', businessId)
+            .select('*, business:businesses(id, name), user:users(id, name, avatar)')
+            .eq('user_id', finalUserId)
+            .eq('business_id', finalBusinessId)
             .maybeSingle();
 
         if (fetchError) {
@@ -34,9 +60,23 @@ exports.getOrCreateRoom = async (req, res) => {
         }
 
         if (existingRoom) {
+            const formatted = {
+                id: existingRoom.id,
+                user_id: existingRoom.user_id,
+                business_id: existingRoom.business_id,
+                created_at: existingRoom.created_at,
+                partner_name: isBusiness
+                    ? (existingRoom.user ? existingRoom.user.name : 'Khách hàng')
+                    : (existingRoom.business ? existingRoom.business.name : 'Doanh nghiệp'),
+                partner_avatar: isBusiness
+                    ? (existingRoom.user ? existingRoom.user.avatar : null)
+                    : null,
+                business: existingRoom.business
+            };
+
             return res.status(200).json({
                 success: true,
-                data: existingRoom,
+                data: formatted,
                 error: null,
                 message: 'Chat room retrieved successfully'
             });
@@ -45,8 +85,8 @@ exports.getOrCreateRoom = async (req, res) => {
         // 2. Create new room
         const { data: newRoom, error: createError } = await supabase
             .from('chat_rooms')
-            .insert([{ user_id: userId, business_id: businessId }])
-            .select('*, business:businesses(id, name)')
+            .insert([{ user_id: finalUserId, business_id: finalBusinessId }])
+            .select('*, business:businesses(id, name), user:users(id, name, avatar)')
             .single();
 
         if (createError) {
@@ -58,9 +98,23 @@ exports.getOrCreateRoom = async (req, res) => {
             });
         }
 
+        const formattedNew = {
+            id: newRoom.id,
+            user_id: newRoom.user_id,
+            business_id: newRoom.business_id,
+            created_at: newRoom.created_at,
+            partner_name: isBusiness
+                ? (newRoom.user ? newRoom.user.name : 'Khách hàng')
+                : (newRoom.business ? newRoom.business.name : 'Doanh nghiệp'),
+            partner_avatar: isBusiness
+                ? (newRoom.user ? newRoom.user.avatar : null)
+                : null,
+            business: newRoom.business
+        };
+
         res.status(201).json({
             success: true,
-            data: newRoom,
+            data: formattedNew,
             error: null,
             message: 'Chat room created successfully'
         });

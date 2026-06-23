@@ -194,7 +194,10 @@ exports.getMyBookings = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('bookings')
-            .select('*')
+            .select(`
+                *,
+                payments(transaction_code)
+            `)
             .eq('user_id', req.user.id)
             .order('booking_date', { ascending: false });
 
@@ -603,16 +606,40 @@ exports.getBusinessBookings = async (req, res) => {
         }
 
         const { data: bookings, error } = await query
-            .select('*, users(name, phone), hotels(name), tours(name)')
+            .select('*, hotels(name), tours(name)')
             .order('booking_date', { ascending: false });
 
         if (error) {
+            console.error('getBusinessBookings select error:', error);
             return res.status(500).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.SERVER_ERROR,
                 message: error.message
             });
+        }
+
+        // Fetch users separately to bypass missing PostgREST bookings->users schema cache relationship
+        if (bookings && bookings.length > 0) {
+            const userIds = [...new Set(bookings.map(b => b.user_id).filter(Boolean))];
+            if (userIds.length > 0) {
+                const { data: users, error: usersError } = await supabase
+                    .from('users')
+                    .select('id, name, phone')
+                    .in('id', userIds);
+                
+                if (!usersError && users) {
+                    const userMap = {};
+                    users.forEach(u => {
+                        userMap[u.id] = u;
+                    });
+                    bookings.forEach(b => {
+                        b.users = userMap[b.user_id] || null;
+                    });
+                } else if (usersError) {
+                    console.warn('getBusinessBookings users query error:', usersError.message);
+                }
+            }
         }
 
         res.status(200).json({

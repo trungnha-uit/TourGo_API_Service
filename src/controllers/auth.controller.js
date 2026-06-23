@@ -4,25 +4,39 @@ const ERROR_CODES = require('../constants/errorCodes');
 
 exports.register = async (req, res) => {
     try {
-        const {name, email, password, location} = req.body;
+        const { name, email, password, location } = req.body;
 
-        const {data: authData, error: authError} = await supabaseAuth.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    name: name  
-                }
-            }
-        });
+        const { data: authData, error: authError } =
+            await supabaseAuth.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        name
+                    },
+
+            emailRedirectTo: 'tourgo://auth/confirm'
+        }
+    });
 
         if (authError) {
             let errorCode = ERROR_CODES.SERVER_ERROR;
 
-            if(authError.message.includes('already registered')) {
-                errorCode = ERROR_CODES.AUTH_EMAIL_ALREADY_EXISTS;
-            } else if(authError.message.includes('password')) {
-                errorCode = ERROR_CODES.AUTH_WEAK_PASSWORD;
+            if (
+                authError.message
+                    .toLowerCase()
+                    .includes('already registered')
+            ) {
+                errorCode =
+                    ERROR_CODES.AUTH_EMAIL_ALREADY_EXISTS;
+
+            } else if (
+                authError.message
+                    .toLowerCase()
+                    .includes('password')
+            ) {
+                errorCode =
+                    ERROR_CODES.AUTH_WEAK_PASSWORD;
             }
 
             return res.status(400).json({
@@ -33,60 +47,83 @@ exports.register = async (req, res) => {
             });
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // cập nhật bảng users
+        const { error: updateError } =
+            await supabase
+                .from('users')
+                .update({
+                    name,
+                    email,
+                    role: 'user',
+                    avatar: null,
+                    phone: null,
+                    location: location || null
+                })
+                .eq('id', authData.user.id);
 
-        const {error: updateError} = await supabase
-            .from('users')
-            .update({
-                name,
-                email,
-                role: 'user',
-                avatar: null,
-                phone: null,
-                location: location || null
-            })
-            .eq('id', authData.user.id);
+        if (updateError) {
+            console.error(updateError);
 
-        if(updateError) {
-            console.error('Failed to update user profile:', updateError);
             return res.status(400).json({
                 success: false,
                 data: null,
                 error: ERROR_CODES.SERVER_ERROR,
-                message: 'Failed to update user profile'
+                message:
+                    'Failed to update user profile'
             });
         }
 
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
+
             data: {
                 user: {
                     id: authData.user.id,
                     email: authData.user.email,
-                    name: name,
-                    role: 'user'
+                    name,
+                    role: 'user',
+
+                    // frontend biết đã verify chưa
+                    emailVerified:
+                        !!authData.user.email_confirmed_at
                 },
-                session: {
-                    access_token: authData.session.access_token,
-                    refresh_token: authData.session.refresh_token,
-                    expires_at: authData.session.expires_at,
-                    token_type: authData.session.token_type
-                }
+
+                // signup có thể null
+                session:
+                    authData.session
+                        ? {
+                              access_token:
+                                  authData.session.access_token,
+
+                              refresh_token:
+                                  authData.session.refresh_token,
+
+                              expires_at:
+                                  authData.session.expires_at,
+
+                              token_type:
+                                  authData.session.token_type
+                          }
+                        : null
             },
+
             error: null,
-            message: 'Registration successful'
+
+            message:
+                'Registration successful. Please check your email to verify your account.'
         });
 
     } catch (error) {
         console.error('Register error:', error);
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
             data: null,
             error: ERROR_CODES.SERVER_ERROR,
             message: 'Internal server error'
         });
     }
-}
+};
 
 exports.login = async (req, res) => {
     try {
@@ -98,6 +135,14 @@ exports.login = async (req, res) => {
         });
 
         if (authError) {
+            if (authError.message.includes('not confirmed') || authError.message.toLowerCase().includes('email not confirmed')) {
+                return res.status(403).json({
+                    success: false,
+                    data: null,
+                    error: 'AUTH_EMAIL_NOT_CONFIRMED',
+                    message: 'Vui lòng xác thực email trước khi đăng nhập.'
+                });
+            }
             return res.status(401).json({
                 success: false,
                 data: null,
@@ -154,6 +199,53 @@ exports.login = async (req, res) => {
         });
     }
 }
+
+exports.resendVerification = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'VALIDATION_ERROR',
+                message: 'Email is required'
+            });
+        }
+
+       const { error } = await supabaseAuth.auth.resend({
+        type: 'signup',
+        email,
+
+        options: {
+        emailRedirectTo: 'tourgo://auth/confirm'
+    }
+});
+
+        if (error) {
+            return res.status(400).json({
+                success: false,
+                data: null,
+                error: 'RESEND_FAILED',
+                message: error.message
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: null,
+            error: null,
+            message: 'Verification email resent successfully'
+        });
+    } catch (error) {
+        console.error('Resend verification error:', error);
+        res.status(500).json({
+            success: false,
+            data: null,
+            error: ERROR_CODES.SERVER_ERROR,
+            message: 'Internal server error'
+        });
+    }
+};
 
 /**
  * Social login (Google / Facebook).
